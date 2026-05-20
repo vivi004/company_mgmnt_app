@@ -50,12 +50,27 @@ export const createShop = async (payload: Partial<Shop>): Promise<Shop> => {
   return res.json();
 };
 
-export const collectPayment = async (shopId: number, amount: number, method: string, description: string, createdBy: string): Promise<any> => {
+export const collectPayment = async (
+  shopId: number, 
+  payload: {
+    amount: number;
+    payment_method: string;
+    cash_amount: number;
+    upi_amount: number;
+    cheque_amount: number;
+    description: string;
+    created_by: string;
+    collection_date?: string;
+  }
+): Promise<any> => {
   const res = await authenticatedFetch(`${API_BASE_URL}/shops/${shopId}/collect-payment`, {
     method: 'POST',
-    body: JSON.stringify({ amount, payment_method: method, description, created_by: createdBy }),
+    body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error('Failed to record payment');
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(errorData.error || errorData.message || 'Failed to record payment');
+  }
   return res.json();
 };
 
@@ -64,11 +79,39 @@ export const fetchShopLedger = async (shopId: number, limit: number = 20, skip: 
   if (!res.ok) throw new Error('Failed to fetch ledger');
   return res.json();
 };
-export const adjustBalance = async (shopId: number, amount: number, description: string, createdBy: string): Promise<any> => {
+
+export const adjustBalance = async (
+  shopId: number, 
+  payload: {
+    amount: number;
+    description: string;
+    created_by: string;
+    payment_method?: string | null;
+    collection_date?: string;
+  }
+): Promise<any> => {
   const res = await authenticatedFetch(`${API_BASE_URL}/shops/${shopId}/adjust-balance`, {
     method: 'POST',
-    body: JSON.stringify({ amount, description, created_by: createdBy }),
+    body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error('Failed to adjust balance');
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(errorData.error || errorData.message || 'Failed to adjust balance');
+  }
   return res.json();
+};
+
+export const approveTransaction = async (txId: number) => {
+    const res = await authenticatedFetch(`${API_BASE_URL}/shops/transactions/${txId}/approve`, { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to approve transaction');
+    return res.json();
+};
+
+export const rejectTransaction = async (txId: number, reason: string) => {
+    const res = await authenticatedFetch(`${API_BASE_URL}/shops/transactions/${txId}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ reason })
+    });
+    if (!res.ok) throw new Error('Failed to reject transaction');
+    return res.json();
 };

@@ -1,2 +1,2 @@
-import CollectionsScreen from '../../src/screens/billing/collections';
-export default CollectionsScreen;
+import TodayCollectionScreen from '../../src/screens/Admin/TodayCollection/TodayCollectionScreen';
+export default TodayCollectionScreen;

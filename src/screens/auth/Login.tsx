@@ -42,7 +42,7 @@ export default function Login() {
   return (
     <SafeAreaView className="flex-1 bg-[#FAFBFD]">
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
         <ScrollView 

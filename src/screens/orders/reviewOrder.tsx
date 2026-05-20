@@ -43,6 +43,9 @@ function ReviewItemRow({ item, index, cart, updateQuantity, setAbsoluteQuantity 
 
     // Determine display unit - exactly like web
     let displayUnit = (item.unit || 'NOS').toUpperCase();
+    if (item.id === 'vs-gn-500ml-box' || item.id === 'vs-gn-1l-box' || item.id.endsWith('-box')) {
+        displayUnit = 'BOX';
+    }
     const fullDesc = `${item.name} ${item.size}`.toUpperCase();
     
     if (/\b15\s*(LTR|KG|L|T|TIN)\b/i.test(fullDesc)) {
@@ -57,7 +60,17 @@ function ReviewItemRow({ item, index, cart, updateQuantity, setAbsoluteQuantity 
         displayUnit = 'PCS';
     }
 
-    const cartDelta = item.id.includes('_ltr') ? 0.5 : 1;
+    const isLtrVariant = item.id.endsWith('_ltr');
+    const sizeLower = item.size.toLowerCase();
+    const is100ml = sizeLower === '100 ml';
+    const is200ml = sizeLower === '200 ml';
+    const is500ml = sizeLower === '500 ml';
+    const isConvertibleLtr = isLtrVariant && (is100ml || is200ml || is500ml);
+    const ltrMultiplier = is100ml ? 10 : is200ml ? 5 : is500ml ? 2 : 1;
+
+    const displayUnitFinal = isConvertibleLtr ? 'LTR' : displayUnit;
+    const displayRate = isConvertibleLtr ? item.price * ltrMultiplier : item.price;
+    const cartDelta = isConvertibleLtr ? (1 / ltrMultiplier) : (item.id.includes('_ltr') ? 0.5 : 1);
 
     return (
         <View className="px-6 py-5 border-b border-slate-50">
@@ -65,7 +78,7 @@ function ReviewItemRow({ item, index, cart, updateQuantity, setAbsoluteQuantity 
                 <Text className="w-10 font-black text-slate-400">{index + 1}</Text>
                 <View className="flex-1">
                     <Text className="font-black text-base text-slate-900" numberOfLines={1}>
-                        {item.name} {item.size}
+                        {item.id === 'vs-gn-500ml-box' || item.id === 'vs-gn-1l-box' ? `${item.name} ${item.size.replace(/\s*box$/i, '')}` : `${item.name} ${item.size}`}
                     </Text>
                     <Text className="text-xs font-bold text-slate-500 mt-0.5">{item.brand}</Text>
                 </View>
@@ -88,7 +101,7 @@ function ReviewItemRow({ item, index, cart, updateQuantity, setAbsoluteQuantity 
                             selectTextOnFocus={true}
                             className="font-black text-slate-900 text-sm leading-tight text-center w-10 py-1"
                          />
-                        <Text className="text-[8px] font-black text-slate-500 uppercase tracking-widest">{displayUnit}</Text>
+                        <Text className="text-[8px] font-black text-slate-500 uppercase tracking-widest">{displayUnitFinal}</Text>
                       </View>
                      <TouchableOpacity 
                         onPress={() => updateQuantity(item.id, cartDelta)}
@@ -99,8 +112,8 @@ function ReviewItemRow({ item, index, cart, updateQuantity, setAbsoluteQuantity 
                 </View>
 
                 <View className="items-end">
-                    <Text className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Rate ₹{item.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
-                    <Text className="text-lg font-black text-slate-900">₹{(item.price * item.quantity).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
+                    <Text className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Rate ₹{displayRate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
+                    <Text className="text-lg font-black text-slate-900">₹{(displayRate * qty).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
                 </View>
             </View>
         </View>
@@ -142,6 +155,15 @@ export default function ReviewOrder() {
   });
 
   const [placing, setPlacing] = useState(false);
+
+  // Safety timeout to prevent stuck buttons
+  useEffect(() => {
+    if (placing) {
+      const t = setTimeout(() => setPlacing(false), 15000);
+      return () => clearTimeout(t);
+    }
+  }, [placing]);
+
   const [ratesRevision, setRatesRevision] = useState(0);
   
   const [deliveryDate, setDeliveryDate] = useState(() => {
@@ -178,22 +200,24 @@ export default function ReviewOrder() {
       // But for simplicity in review, we use 1 unit or the specific product's logic
       const current = prev[id] || 0;
       const next = Math.max(0, current + delta);
-      if (next === 0) {
+      const roundedNext = Math.round(next * 1000) / 1000;
+      if (roundedNext === 0) {
         const { [id]: _, ...rest } = prev;
         return rest;
       }
-      return { ...prev, [id]: next };
+      return { ...prev, [id]: roundedNext };
     });
   };
 
   const setAbsoluteQuantity = (id: string, val: number) => {
     setCart((prev) => {
       const next = Math.max(0, val);
-      if (next === 0) {
+      const roundedNext = Math.round(next * 1000) / 1000;
+      if (roundedNext === 0) {
         const { [id]: _, ...rest } = prev;
         return rest;
       }
-      return { ...prev, [id]: next };
+      return { ...prev, [id]: roundedNext };
     });
   };
 
@@ -216,14 +240,13 @@ export default function ReviewOrder() {
       const finalCustomRates: Record<string, number> = {};
       let hasEditedPrice = false;
       
-      // We iterate over all keys in the cart (including variants like _box, _ltr)
-      Object.keys(cart).forEach(id => {
-          if (cart[id] > 0) {
-              const price = customPrices[id];
-              if (price !== undefined) {
-                  finalCustomRates[id] = price;
-                  // If price differs from base products, mark as edited
-                  // (Note: base products are loaded from productService)
+      const allProds = getAllProducts();
+      allProds.forEach(p => {
+          if (p.id.endsWith('_box') || p.id.endsWith('_ltr')) return;
+          if (cart[p.id] > 0 || cart[`${p.id}_box`] > 0 || cart[`${p.id}_ltr`] > 0) {
+              const basePrice = customPrices[p.id] ?? p.price;
+              finalCustomRates[p.id] = basePrice;
+              if (customPrices[p.id] !== undefined && customPrices[p.id] !== p.price) {
                   hasEditedPrice = true;
               }
           }
@@ -266,6 +289,7 @@ export default function ReviewOrder() {
       } else {
         // SUBMIT NEW BILL
         const billData = {
+          shop_id: Number(params.shopId),
           shop_name: params.shopName,
           village_name: params.villageName,
           cart: cart,

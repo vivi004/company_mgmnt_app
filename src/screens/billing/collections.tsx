@@ -71,7 +71,7 @@ export default function CollectionsScreen() {
     setLoading(true);
     try {
       const data = await collectionService.fetchCollectionsByOrderLine(olId, date);
-      setCollections(data);
+      setCollections(data.collections);
     } catch (error) {
       console.error('Failed to load collections:', error);
     } finally {
@@ -261,7 +261,10 @@ export default function CollectionsScreen() {
                 return (
                   <View key={row.id} className={idx !== collections.length - 1 ? "p-6 border-b border-slate-50" : "p-6"}>
                     <View className="flex-row items-center justify-between mb-3">
-                      <Text className="font-black text-slate-800 text-base">{idx + 1}. {row.shop_name}</Text>
+                      <View className="flex-1 mr-2">
+                        <Text className="font-black text-slate-800 text-base">{idx + 1}. {row.shop_name}</Text>
+                        <Text className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-1">{row.owner_name || 'No Area Name'}</Text>
+                      </View>
                       <View className="flex-row gap-1">
                         {row.cash_collected > 0 && (
                           <View className="bg-green-50 px-2 py-1 rounded-lg border border-green-100">

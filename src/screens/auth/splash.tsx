@@ -78,7 +78,7 @@ export default function Splash() {
         </Text>
         <View className='h-1 w-12 bg-yellow-500 mt-2 rounded-full' />
         <Text className='text-gray-400 mt-4 font-medium tracking-[4px] uppercase text-xs'>
-          Since 1995
+          Since 2017
         </Text>
       </Animated.View>
 

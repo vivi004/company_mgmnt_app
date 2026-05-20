@@ -18,6 +18,7 @@ import * as billService from '../../services/billService';
 import { getUserData } from '../../services/authService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCartItems } from '../../services/productService';
+import { formatIST, parseIST } from '../../utils/dateUtils';
 
 export default function BillCheckScreen() {
   const router = useRouter();
@@ -267,18 +268,16 @@ export default function BillCheckScreen() {
           <View className="px-4">
             {filteredBills.map(bill => (
               <View key={bill.id} className="bg-white rounded-[32px] border border-slate-100 p-6 mb-4 shadow-xl shadow-slate-200/50">
-                <View className="flex-row items-center justify-between mb-2">
-                  <View className="flex-row items-center gap-3">
-                    <Text className="text-xl font-black text-[#1E293B]">{bill.shop_name}</Text>
-                    <View className="px-2 py-1 bg-slate-50 rounded-lg border border-slate-100">
-                      <Text className="text-[10px] font-black text-slate-500">INV-{bill.invoice_no}</Text>
-                    </View>
-                    {bill.is_edited_price && (
-                       <View className="px-2 py-1 bg-red-100/50 rounded-lg border border-red-200">
-                         <Text className="text-[10px] font-black text-red-600 uppercase tracking-widest">Edited Price</Text>
-                       </View>
-                    )}
+                <View className="flex-row flex-wrap items-center gap-2 mb-2">
+                  <Text className="text-xl font-black text-[#1E293B]">{bill.shop_name}</Text>
+                  <View className="px-2 py-1 bg-slate-50 rounded-lg border border-slate-100">
+                    <Text className="text-[10px] font-black text-slate-500">INV-{bill.invoice_no}</Text>
                   </View>
+                  {bill.is_edited_price && (
+                     <View className="px-2 py-1 bg-red-100/50 rounded-lg border border-red-200">
+                       <Text className="text-[10px] font-black text-red-600 uppercase tracking-widest">Edited Price</Text>
+                     </View>
+                  )}
                 </View>
                 <Text className="text-xs font-black text-blue-500 uppercase tracking-widest mb-4">
                   {bill.specific_area || bill.area_name || bill.village_name}
@@ -292,12 +291,7 @@ export default function BillCheckScreen() {
                   <View className="mt-2">
                     <View className="flex-row items-center gap-2">
                       {(() => {
-                        const dateStr = bill.delivery_date || bill.bill_date;
-                        let validIso = dateStr;
-                        if (typeof dateStr === 'string' && !dateStr.includes('Z') && !dateStr.includes('+')) {
-                          validIso = dateStr.includes('T') ? dateStr + 'Z' : dateStr.replace(' ', 'T') + 'Z';
-                        }
-                        const d = new Date(validIso);
+                        const d = parseIST(bill.delivery_date || bill.bill_date);
                         const tomorrow = new Date();
                         tomorrow.setDate(tomorrow.getDate() + 1);
                         const isTomorrow = d.getDate() === tomorrow.getDate() &&
@@ -306,10 +300,7 @@ export default function BillCheckScreen() {
 
                         return (
                           <Text className="text-sm font-black text-blue-600">
-                            {d.toLocaleDateString('en-IN', {
-                              day: '2-digit', month: 'short', year: 'numeric',
-                              timeZone: 'Asia/Kolkata'
-                            })}
+                            {formatIST(d, { hour: undefined, minute: undefined })}
                             {isTomorrow ? (
                               <Text className="text-[9px] font-black text-emerald-500 ml-2 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100"> TOMORROW</Text>
                             ) : null}
@@ -318,18 +309,7 @@ export default function BillCheckScreen() {
                       })()}
                     </View>
                     <Text className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">
-                      Order Taken: {(() => {
-                        const dateStr = bill.bill_date;
-                        let validIso = dateStr;
-                        if (typeof dateStr === 'string' && !dateStr.includes('Z') && !dateStr.includes('+')) {
-                          validIso = dateStr.includes('T') ? dateStr + 'Z' : dateStr.replace(' ', 'T') + 'Z';
-                        }
-                        return new Date(validIso).toLocaleString('en-IN', {
-                          day: '2-digit', month: 'short', year: 'numeric',
-                          hour: '2-digit', minute: '2-digit',
-                          timeZone: 'Asia/Kolkata'
-                        });
-                      })()}
+                      Order Taken: {formatIST(bill.bill_date)}
                     </Text>
                   </View>
                 </View>

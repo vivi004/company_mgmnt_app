@@ -200,22 +200,24 @@ export default function OrderingScreen() {
     setCart((prev) => {
       const current = prev[id] || 0;
       const next = Math.max(0, current + delta);
-      if (next === 0) {
+      const roundedNext = Math.round(next * 1000) / 1000;
+      if (roundedNext === 0) {
         const { [id]: _, ...rest } = prev;
         return rest;
       }
-      return { ...prev, [id]: next };
+      return { ...prev, [id]: roundedNext };
     });
   };
 
   const setAbsoluteQuantity = (id: string, val: number) => {
     setCart((prev) => {
       const next = Math.max(0, val);
-      if (next === 0) {
+      const roundedNext = Math.round(next * 1000) / 1000;
+      if (roundedNext === 0) {
         const { [id]: _, ...rest } = prev;
         return rest;
       }
-      return { ...prev, [id]: next };
+      return { ...prev, [id]: roundedNext };
     });
   };
 
@@ -350,6 +352,7 @@ export default function OrderingScreen() {
         {/* Main Product List */}
         <View className="flex-1">
           <FlatList
+            keyboardShouldPersistTaps="handled"
             ref={flatListRef}
             data={filteredProducts}
             keyExtractor={(item) => item.id}
@@ -449,9 +452,23 @@ const ProductCard = memo(({ product, cart, customPrices, updateQuantity, setAbso
   setAbsoluteQuantity: (id: string, val: number) => void;
   handlePriceChange: (id: string, val: string) => void;
 }) => {
+  const sizeLower = product.size.toLowerCase();
+  const is100ml = sizeLower === '100 ml';
+  const is200ml = sizeLower === '200 ml';
+  const is500ml = sizeLower === '500 ml';
+  const getMultiplier = () => {
+    if (is100ml) return 10;
+    if (is200ml) return 5;
+    if (is500ml) return 2;
+    return 1;
+  };
+  const mult = getMultiplier();
+  const getDisplayPrice = (val: number) => val * mult;
+  const getRawPrice = (val: number) => val / mult;
+
   const [localQty, setLocalQty] = useState<string | null>(null);
   const [localPrice, setLocalPrice] = useState<string>(
-    customPrices[product.id] !== undefined ? String(customPrices[product.id]) : String(product.price)
+    customPrices[product.id] !== undefined ? String(getDisplayPrice(customPrices[product.id])) : String(getDisplayPrice(product.price))
   );
 
   const qty = cart[product.id] || 0;
@@ -464,7 +481,7 @@ const ProductCard = memo(({ product, cart, customPrices, updateQuantity, setAbso
   useEffect(() => {
     const currentPrice = customPrices[product.id];
     const defaultPrice = product.price;
-    const priceToShow = currentPrice !== undefined ? String(currentPrice) : String(defaultPrice);
+    const priceToShow = currentPrice !== undefined ? String(getDisplayPrice(currentPrice)) : String(getDisplayPrice(defaultPrice));
     
     // Only sync if the user is not actively typing (localPrice is not empty)
     // or if the underlying data changed to something different than what we have
@@ -498,7 +515,7 @@ const ProductCard = memo(({ product, cart, customPrices, updateQuantity, setAbso
     if (isNisha) {
       if (size === '100 ml') return <BoxLitreControls product={product} cart={cart} customPrices={customPrices} updateQuantity={updateQuantity} setAbsoluteQuantity={setAbsoluteQuantity} handlePriceChange={handlePriceChange} boxMult={50} ltrMult={10} ltrLabel="LTR" ltrStep={1} />;
       if (size === '200 ml') return <BoxLitreControls product={product} cart={cart} customPrices={customPrices} updateQuantity={updateQuantity} setAbsoluteQuantity={setAbsoluteQuantity} handlePriceChange={handlePriceChange} boxMult={25} ltrMult={5} ltrLabel="LTR" ltrStep={1} />;
-      if (size === '500 ml') return <BoxLitreControls product={product} cart={cart} customPrices={customPrices} updateQuantity={updateQuantity} setAbsoluteQuantity={setAbsoluteQuantity} handlePriceChange={handlePriceChange} boxMult={20} ltrMult={1} ltrLabel="PCS" ltrStep={1} />;
+      if (size === '500 ml') return <BoxLitreControls product={product} cart={cart} customPrices={customPrices} updateQuantity={updateQuantity} setAbsoluteQuantity={setAbsoluteQuantity} handlePriceChange={handlePriceChange} boxMult={20} ltrMult={2} ltrLabel="LTR" ltrStep={1} />;
       if (size === '1 litre' || size === '1 ltr' || size === '1 ltr-pet') return <BoxLitreControls product={product} cart={cart} customPrices={customPrices} updateQuantity={updateQuantity} setAbsoluteQuantity={setAbsoluteQuantity} handlePriceChange={handlePriceChange} boxMult={10} ltrMult={1} ltrLabel="PCS" ltrStep={1} />;
       if (size === '2 ltr') return <BoxLitreControls product={product} cart={cart} customPrices={customPrices} updateQuantity={updateQuantity} setAbsoluteQuantity={setAbsoluteQuantity} handlePriceChange={handlePriceChange} boxMult={5} ltrMult={1} ltrLabel="2L-PCS" ltrStep={1} />;
     }
@@ -564,14 +581,14 @@ const ProductCard = memo(({ product, cart, customPrices, updateQuantity, setAbso
                   
                   if (finalVal === "" || /^\d*\.?\d*$/.test(finalVal)) {
                     setLocalPrice(finalVal);
-                    handlePriceChange(product.id, finalVal);
+                    handlePriceChange(product.id, String(getRawPrice(parseFloat(finalVal) || 0)));
                   }
                 }}
                 onBlur={() => {
                   // If left as 0 or invalid, restore product price
                   if (localPrice === "" || parseFloat(localPrice) === 0 || isNaN(parseFloat(localPrice))) {
                     const resetPrice = String(product.price);
-                    setLocalPrice(resetPrice);
+                    setLocalPrice(String(getDisplayPrice(product.price)));
                     handlePriceChange(product.id, resetPrice);
                   }
                 }}

@@ -1,4 +1,5 @@
 import { getCartItems, Product } from '../services/productService';
+import { formatIST } from './dateUtils';
 
 const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
     'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
@@ -55,33 +56,46 @@ export interface InvoiceData {
 }
 
 export const generateInvoiceHTML = (data: InvoiceData, vehicleNo: string = '') => {
-    const items = getCartItems(data.cart, data.customRates);
+    const items = getCartItems(data.cart, data.customRates).map(it => {
+        const isLtrVariant = it.id.endsWith('_ltr');
+        const sizeLower = it.size.toLowerCase();
+        const is100ml = sizeLower === '100 ml';
+        const is200ml = sizeLower === '200 ml';
+        const is500ml = sizeLower === '500 ml';
+        if (isLtrVariant && (is100ml || is200ml || is500ml)) {
+            const multiplier = is100ml ? 10 : is200ml ? 5 : is500ml ? 2 : 1;
+            return {
+                ...it,
+                quantity: it.quantity / multiplier,
+                price: it.price * multiplier,
+                unit: 'LTR'
+            };
+        }
+        return it;
+    });
     const totalQty = items.reduce((a, i) => a + i.quantity, 0);
     const totalAmt = items.reduce((a, i) => a + i.price * i.quantity, 0);
-    const d = new Date(data.date);
-    const formatDate = (date: Date) => {
-        const day = date.getDate().toString().padStart(2, '0');
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const month = months[date.getMonth()];
-        const year = date.getFullYear();
-        return `${day}-${month}-${year}`;
-    };
-    
-    const ds = formatDate(d);
-    const dd = data.deliveryDate ? new Date(data.deliveryDate) : d;
-    const dds = formatDate(dd);
+    const ds = formatIST(data.date, { hour: undefined, minute: undefined, second: undefined, hour12: false });
+    const dd = data.deliveryDate || data.date;
+    const dds = formatIST(dd, { hour: undefined, minute: undefined, second: undefined, hour12: false });
     
     const B   = 'border:1px solid #000;padding:3px 5px;vertical-align:top;';
     const LR  = 'border-left:1px solid #000;border-right:1px solid #000;border-top:none;border-bottom:none;padding:3px 5px;vertical-align:top;';
     const LRB = 'border-left:1px solid #000;border-right:1px solid #000;border-top:none;border-bottom:1px solid #000;padding:3px 5px;vertical-align:top;';
 
     const itemRows = items.map((it, i) => {
-        const description = `${it.name.toUpperCase()} ${it.size.toUpperCase()}`;
+        let description = `${it.name.toUpperCase()} ${it.size.toUpperCase()}`;
+        if (it.id === 'vs-gn-500ml-box' || it.id === 'vs-gn-1l-box') {
+            description = description.replace(/\s*BOX$/i, '');
+        }
         let u = (it.unit || 'NOS').toUpperCase();
 
-        if (/\b15\s*(LTR|KG|L|T|TIN)\b/i.test(description))              u = 'TIN';
+        if (it.id === 'vs-gn-500ml-box' || it.id === 'vs-gn-1l-box' || it.id.endsWith('-box')) {
+            u = 'BOX';
+        } else if (/\b15\s*(LTR|KG|L|T|TIN)\b/i.test(description))              u = 'TIN';
         else if (/\b5\s*(LTR|KG|L|CAN)\b/i.test(description))            u = 'CAN';
         else if (/\bBOX\b/i.test(description) || it.id.includes('_box')) u = 'BOX';
+        else if (it.id.endsWith('_ltr') && (it.size.toLowerCase() === '100 ml' || it.size.toLowerCase() === '200 ml' || it.size.toLowerCase() === '500 ml')) u = 'LTR';
         else if (/\b(100|200|500)\s*ML\b/i.test(description))            u = 'PCS';
         else if (u === 'LITRE')                                          u = 'PCS';
 
