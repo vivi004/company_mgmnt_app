@@ -18,7 +18,8 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.vivinm2204.nisha"
+      "package": "com.vivinm2204.nisha",
+      "softwareKeyboardLayoutMode": "adjustResize"
     },
     "web": {
       "output": "static",
