@@ -1,10 +1,12 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   ScrollView,
   Dimensions,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -14,6 +16,9 @@ import { WebView } from 'react-native-webview';
 import { StatusBar } from 'expo-status-bar';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
+import { EncodingType } from 'expo-file-system/legacy';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { generateInvoiceHTML } from '../../utils/invoiceUtils';
 
 const BILL_CONTAINER_WIDTH = 1000;
@@ -39,6 +44,34 @@ export default function InvoiceScreen() {
     editBillId: string;
   }>();
 
+  const [upiSettings, setUpiSettings] = useState({
+    upiId1: 'nishaoilmills@ybl',
+    upiName1: 'NISHA OIL MILL',
+    upiId2: 'nishaoilmills@okaxis',
+    upiName2: 'NISHA OIL MILL',
+  });
+
+  useEffect(() => {
+    const loadUpiSettings = async () => {
+      try {
+        const storedUpiId1 = await AsyncStorage.getItem('upiId1');
+        const storedUpiName1 = await AsyncStorage.getItem('upiName1');
+        const storedUpiId2 = await AsyncStorage.getItem('upiId2');
+        const storedUpiName2 = await AsyncStorage.getItem('upiName2');
+        
+        setUpiSettings({
+          upiId1: storedUpiId1 || 'nishaoilmills@ybl',
+          upiName1: storedUpiName1 || 'NISHA OIL MILL',
+          upiId2: storedUpiId2 || 'nishaoilmills@okaxis',
+          upiName2: storedUpiName2 || 'NISHA OIL MILL',
+        });
+      } catch (e) {
+        console.error('Failed to load UPI settings', e);
+      }
+    };
+    loadUpiSettings();
+  }, []);
+
   const invoiceData = useMemo(() => ({
     shopName: params.shopName || 'Unknown Shop',
     villageName: params.villageName || 'Unknown village',
@@ -50,10 +83,14 @@ export default function InvoiceScreen() {
     date: params.date || new Date().toISOString(),
     deliveryDate: params.deliveryDate || params.date || new Date().toISOString(),
     phone: params.phone || '',
-    phone2: params.phone2 || ''
-  }), [params]);
+    phone2: params.phone2 || '',
+    ...upiSettings
+  }), [params, upiSettings]);
 
   const htmlContent = useMemo(() => generateInvoiceHTML(invoiceData), [invoiceData]);
+  const webViewRef = useRef<WebView>(null);
+  const [downloadingImage, setDownloadingImage] = useState(false);
+
   const handleDownloadPDF = async () => {
     try {
       const { uri } = await Print.printToFileAsync({
@@ -63,6 +100,35 @@ export default function InvoiceScreen() {
       await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
     } catch (error) {
       console.error('Error generating PDF:', error);
+    }
+  };
+
+  const handleDownloadImage = () => {
+    if (downloadingImage) return;
+    setDownloadingImage(true);
+    webViewRef.current?.injectJavaScript('captureAsImage(); void(0);');
+  };
+
+  const handleMessage = async (event: any) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === 'CAPTURE_IMAGE') {
+        const base64Data = data.dataUrl.split(',')[1];
+        const filename = `Invoice_${invoiceData.invoiceNo}.png`;
+        const fileUri = `${FileSystem.documentDirectory || ''}${filename}`;
+        await FileSystem.writeAsStringAsync(fileUri, base64Data, {
+          encoding: EncodingType.Base64,
+        });
+        setDownloadingImage(false);
+        await Sharing.shareAsync(fileUri, { mimeType: 'image/png', dialogTitle: 'Download Invoice Image' });
+      } else if (data.type === 'CAPTURE_ERROR') {
+        setDownloadingImage(false);
+        Alert.alert('Error', data.error);
+      }
+    } catch (err) {
+      setDownloadingImage(false);
+      console.error('onMessage error:', err);
+      Alert.alert('Error', 'Failed to generate image');
     }
   };
 
@@ -135,31 +201,53 @@ export default function InvoiceScreen() {
         <View className="flex-row gap-4 mb-4">
           <TouchableOpacity
             onPress={handleDownloadPDF}
-            className="flex-1 bg-emerald-600 flex-row items-center justify-center p-5 rounded-[24px] shadow-lg shadow-emerald-600/30"
+            className="flex-1 bg-emerald-600 flex-row items-center justify-center p-4 rounded-[24px] shadow-lg shadow-emerald-600/30"
           >
-            <View className="mr-3 border border-white/30 p-1.5 rounded-lg bg-white/20">
-                <Feather name="file-text" size={20} color="white" />
+            <View className="mr-2 border border-white/30 p-1 rounded-lg bg-white/20">
+                <Feather name="file-text" size={18} color="white" />
             </View>
-            <Text className="text-white font-black text-[12px] uppercase tracking-[2px] text-center">
+            <Text className="text-white font-black text-[11px] uppercase tracking-[1px] text-center">
               Download{'\n'}PDF
             </Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity
-            onPress={handleEdit}
-            className="flex-1 bg-white border border-slate-200 flex-row items-center justify-center p-5 rounded-[24px] shadow-lg shadow-slate-200/50"
+            onPress={handleDownloadImage}
+            disabled={downloadingImage}
+            className="flex-1 bg-blue-600 flex-row items-center justify-center p-4 rounded-[24px] shadow-lg shadow-blue-600/30"
           >
-            <Feather name="edit-3" size={20} color="#64748B" className="mr-3" />
-            <Text className="text-slate-600 font-black text-[14px] uppercase tracking-[2px]">Edit</Text>
+            {downloadingImage ? (
+              <ActivityIndicator color="white" size="small" />
+            ) : (
+              <>
+                <View className="mr-2 border border-white/30 p-1 rounded-lg bg-white/20">
+                    <Feather name="image" size={18} color="white" />
+                </View>
+                <Text className="text-white font-black text-[11px] uppercase tracking-[1px] text-center">
+                  Download{'\n'}Image
+                </Text>
+              </>
+            )}
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity
-          onPress={handleNewOrder}
-          className="w-full bg-white border border-slate-100 py-5 rounded-[24px] items-center justify-center shadow-lg shadow-slate-200/40"
-        >
-          <Text className="text-slate-800 font-black text-[14px] uppercase tracking-[4px]">New Order</Text>
-        </TouchableOpacity>
+        <View className="flex-row gap-4">
+          <TouchableOpacity
+            onPress={handleEdit}
+            className="flex-1 bg-white border border-slate-200 flex-row items-center justify-center py-4 rounded-[24px] shadow-lg shadow-slate-200/50"
+          >
+            <Feather name="edit-3" size={18} color="#64748B" className="mr-2" />
+            <Text className="text-slate-600 font-black text-[13px] uppercase tracking-[2px]">Edit</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={handleNewOrder}
+            className="flex-1 bg-white border border-slate-200 flex-row items-center justify-center py-4 rounded-[24px] shadow-lg shadow-slate-200/50"
+          >
+            <Feather name="plus-circle" size={18} color="#64748B" className="mr-2" />
+            <Text className="text-slate-600 font-black text-[13px] uppercase tracking-[2px]">New Order</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Nested Scroll Area for both H and V scrolling */}
@@ -177,6 +265,7 @@ export default function InvoiceScreen() {
                   >
                       <View style={{ width: BILL_CONTAINER_WIDTH, height: BILL_CONTAINER_HEIGHT }}>
                           <WebView
+                            ref={webViewRef}
                             originWhitelist={['*']}
                             source={{ html: htmlContent }}
                             style={{ flex: 1, backgroundColor: 'white' }}
@@ -185,6 +274,7 @@ export default function InvoiceScreen() {
                             scalesPageToFit={false}
                             scrollEnabled={false} // Let native ScrollViews handle gestures
                             overScrollMode="never"
+                            onMessage={handleMessage}
                           />
                       </View>
                   </ScrollView>

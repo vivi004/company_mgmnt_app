@@ -243,7 +243,7 @@ export function getAllProducts(): Product[] {
                 ...p,
                 id: p.id + '_ltr',
                 name: p.name,
-                size: '1 LTR (2x500ml)',
+                size: '500 ML',
                 price: effectivePrice * 2,
                 unit: 'LTR'
             });

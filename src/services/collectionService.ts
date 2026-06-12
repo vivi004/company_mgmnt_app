@@ -19,6 +19,7 @@ export interface DailyCollection {
     past_bills: number;
     old_balance: number;
     total_balance: number;
+    return_amount: number;
     manual_cash: number;
     manual_upi: number;
     manual_cheque: number;
@@ -48,7 +49,7 @@ export const fetchCollectionsByOrderLine = async (olId: number, date: string): P
         
         const rawCollections = data.collections || [];
         const rawExpenses = data.expenses || [];
-
+ 
         // Parse numeric fields (they may come as strings from MySQL)
         const parsedCollections = rawCollections.map((row: any) => ({
             ...row,
@@ -66,6 +67,7 @@ export const fetchCollectionsByOrderLine = async (olId: number, date: string): P
             future_bills: parseFloat(row.future_bills) || 0,
             past_bills: parseFloat(row.past_bills) || 0,
             old_balance: parseFloat(row.old_balance) || 0,
+            return_amount: parseFloat(row.return_amount) || 0,
             total_balance: parseFloat(row.total_balance) || 0,
             pending_transactions: typeof row.pending_transactions === 'string' ? JSON.parse(row.pending_transactions) : (row.pending_transactions || [])
         }));
@@ -113,5 +115,24 @@ export const deleteExpense = async (id: number) => {
         method: 'DELETE'
     });
     if (!res.ok) throw new Error('Failed to delete expense');
+    return res.json();
+};
+
+export const recordProductReturn = async (shopId: number, productName: string, amount: number, collectionDate: string) => {
+    const res = await authenticatedFetch(`${API_BASE_URL}/shops/${shopId}/product-return`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_name: productName, amount, collection_date: collectionDate })
+    });
+    if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(errorText || 'Failed to record product return');
+    }
+    return res.json();
+};
+
+export const fetchOverallReturns = async (date: string) => {
+    const res = await authenticatedFetch(`${API_BASE_URL}/collections/returns?date=${date}`);
+    if (!res.ok) throw new Error('Failed to fetch returns');
     return res.json();
 };

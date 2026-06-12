@@ -19,6 +19,9 @@ import { getUserData } from '../../services/authService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCartItems } from '../../services/productService';
 import { formatIST, parseIST } from '../../utils/dateUtils';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import { generateLoadingSheetHTML } from '../../utils/loadingSheetGenerator';
 
 export default function BillCheckScreen() {
   const router = useRouter();
@@ -117,15 +120,26 @@ export default function BillCheckScreen() {
         {
           text: 'Verify All',
           onPress: async () => {
-            try {
-              for (const bill of bills) {
+            let successCount = 0;
+            let failedInvoices: string[] = [];
+            for (const bill of bills) {
+              try {
                 await billService.verifyBill(bill.id);
+                successCount++;
+              } catch (error) {
+                failedInvoices.push(`INV-${bill.invoice_no}`);
               }
-              Alert.alert('Success', `${bills.length} bills verified successfully!`, [
+            }
+            if (failedInvoices.length === 0) {
+              Alert.alert('Success', `${successCount} bills verified successfully!`, [
                 { text: 'OK', onPress: () => loadData() }
               ]);
-            } catch (error) {
-              Alert.alert('Error', 'Failed to verify some bills');
+            } else {
+              Alert.alert(
+                'Verification Summary',
+                `Successfully verified ${successCount} bills.\n\nFailed to verify ${failedInvoices.length} bills:\n${failedInvoices.join(', ')}\n\nPlease check your network connection and try again.`,
+                [{ text: 'OK', onPress: () => loadData() }]
+              );
             }
           }
         }
@@ -151,6 +165,32 @@ export default function BillCheckScreen() {
         invoiceNo: bill.invoice_no.toString(),
       }
     } as any);
+  };
+
+  const handlePrintAllLoadingSheet = async () => {
+    if (filteredBills.length === 0) return;
+    try {
+      const d = new Date();
+      const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const html = generateLoadingSheetHTML(filteredBills, today);
+      const { uri } = await Print.printToFileAsync({ html });
+      await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+    } catch (error) {
+      Alert.alert('Error', 'Failed to generate Loading Sheet PDF');
+      console.error(error);
+    }
+  };
+
+  const handlePrintSingleLoadingSheet = async (bill: billService.Bill) => {
+    try {
+      const datePart = (bill.delivery_date || bill.bill_date || '').split('T')[0];
+      const html = generateLoadingSheetHTML([bill], datePart);
+      const { uri } = await Print.printToFileAsync({ html });
+      await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+    } catch (error) {
+      Alert.alert('Error', 'Failed to generate Loading Sheet PDF');
+      console.error(error);
+    }
   };
 
   const getItemCount = (cart: Record<string, number>) =>
@@ -215,13 +255,23 @@ export default function BillCheckScreen() {
         </View>
 
         {bills.length > 0 ? (
-          <TouchableOpacity
-            onPress={handleVerifyAll}
-            className="mt-3 py-2.5 bg-emerald-600 rounded-[16px] shadow-lg shadow-emerald-600/20 flex-row items-center justify-center gap-3"
-          >
-            <Feather name="check-circle" size={18} color="white" />
-            <Text className="text-white font-black text-[10px] uppercase tracking-widest">Verify All Pending Bills</Text>
-          </TouchableOpacity>
+          <View className="mt-3 flex-row gap-2">
+            <TouchableOpacity
+              onPress={handleVerifyAll}
+              className="flex-1 py-3 bg-emerald-600 rounded-[16px] shadow-lg shadow-emerald-600/20 flex-row items-center justify-center gap-2"
+            >
+              <Feather name="check-circle" size={16} color="white" />
+              <Text className="text-white font-black text-[9px] uppercase tracking-widest">Verify All</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handlePrintAllLoadingSheet}
+              className="flex-1 py-3 bg-blue-600 rounded-[16px] shadow-lg shadow-blue-600/20 flex-row items-center justify-center gap-2"
+            >
+              <Feather name="file-text" size={16} color="white" />
+              <Text className="text-white font-black text-[9px] uppercase tracking-widest">Loading Sheet</Text>
+            </TouchableOpacity>
+          </View>
         ) : null}
       </View>
 
@@ -273,11 +323,11 @@ export default function BillCheckScreen() {
                   <View className="px-2 py-1 bg-slate-50 rounded-lg border border-slate-100">
                     <Text className="text-[10px] font-black text-slate-500">INV-{bill.invoice_no}</Text>
                   </View>
-                  {bill.is_edited_price && (
+                  {bill.is_edited_price ? (
                      <View className="px-2 py-1 bg-red-100/50 rounded-lg border border-red-200">
                        <Text className="text-[10px] font-black text-red-600 uppercase tracking-widest">Edited Price</Text>
                      </View>
-                  )}
+                  ) : null}
                 </View>
                 <Text className="text-xs font-black text-blue-500 uppercase tracking-widest mb-4">
                   {bill.specific_area || bill.area_name || bill.village_name}
@@ -299,12 +349,16 @@ export default function BillCheckScreen() {
                           d.getFullYear() === tomorrow.getFullYear();
 
                         return (
-                          <Text className="text-sm font-black text-blue-600">
-                            {formatIST(d, { hour: undefined, minute: undefined })}
+                          <View className="flex-row items-center">
+                            <Text className="text-sm font-black text-blue-600">
+                              {formatIST(d, { hour: undefined, minute: undefined })}
+                            </Text>
                             {isTomorrow ? (
-                              <Text className="text-[9px] font-black text-emerald-500 ml-2 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100"> TOMORROW</Text>
+                              <View className="ml-2 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100">
+                                <Text className="text-[9px] font-black text-emerald-500">TOMORROW</Text>
+                              </View>
                             ) : null}
-                          </Text>
+                          </View>
                         );
                       })()}
                     </View>
@@ -361,6 +415,13 @@ export default function BillCheckScreen() {
                       className="w-12 h-12 rounded-2xl bg-white border border-slate-200 items-center justify-center shadow-sm"
                     >
                       <Feather name="edit-2" size={20} color="#64748B" />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={() => handlePrintSingleLoadingSheet(bill)}
+                      className="w-12 h-12 rounded-2xl bg-white border border-slate-200 items-center justify-center shadow-sm"
+                    >
+                      <Feather name="file-text" size={20} color="#10B981" />
                     </TouchableOpacity>
                   </View>
 

@@ -1,5 +1,30 @@
 import { getCartItems, Product } from '../services/productService';
 import { formatIST } from './dateUtils';
+import * as qrcodeModule from 'qrcode-generator';
+
+const generateQRCodeDataURL = (text: string): string => {
+    try {
+        let qrFn: any = qrcodeModule;
+        if (qrFn && typeof qrFn.qrcode === 'function') {
+            qrFn = qrFn.qrcode;
+        } else if (typeof qrFn !== 'function' && qrFn && typeof qrFn.default === 'function') {
+            qrFn = qrFn.default;
+        }
+        if (typeof qrFn !== 'function' && typeof window !== 'undefined' && (window as any).qrcode) {
+            qrFn = (window as any).qrcode;
+        }
+        if (typeof qrFn !== 'function') {
+            throw new Error('qrcode function is not defined in any of the resolved formats');
+        }
+        const qr = qrFn(0, 'M');
+        qr.addData(text);
+        qr.make();
+        return qr.createDataURL(4, 1);
+    } catch (e) {
+        console.error('Error generating QR code', e);
+        return '';
+    }
+};
 
 const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
     'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
@@ -53,9 +78,20 @@ export interface InvoiceData {
     deliveryDate?: string;
     phone?: string;
     phone2?: string;
+    upiId1?: string;
+    upiName1?: string;
+    upiId2?: string;
+    upiName2?: string;
 }
 
 export const generateInvoiceHTML = (data: InvoiceData, vehicleNo: string = '') => {
+    const upiId1 = data.upiId1 || 'nishaoilmills@ybl';
+    const upiName1 = data.upiName1 || 'NISHA OIL MILL';
+    const upiId2 = data.upiId2 || 'nishaoilmills@okaxis';
+    const upiName2 = data.upiName2 || 'NISHA OIL MILL';
+
+    const upiLink1 = `upi://pay?pa=${upiId1}&pn=${encodeURIComponent(upiName1)}&cu=INR`;
+    const upiLink2 = `upi://pay?pa=${upiId2}&pn=${encodeURIComponent(upiName2)}&cu=INR`;
     const items = getCartItems(data.cart, data.customRates).map(it => {
         const isLtrVariant = it.id.endsWith('_ltr');
         const sizeLower = it.size.toLowerCase();
@@ -78,9 +114,9 @@ export const generateInvoiceHTML = (data: InvoiceData, vehicleNo: string = '') =
     const ds = formatIST(data.date, { hour: undefined, minute: undefined, second: undefined, hour12: false });
     const dd = data.deliveryDate || data.date;
     const dds = formatIST(dd, { hour: undefined, minute: undefined, second: undefined, hour12: false });
-    
-    const B   = 'border:1px solid #000;padding:3px 5px;vertical-align:top;';
-    const LR  = 'border-left:1px solid #000;border-right:1px solid #000;border-top:none;border-bottom:none;padding:3px 5px;vertical-align:top;';
+
+    const B = 'border:1px solid #000;padding:3px 5px;vertical-align:top;';
+    const LR = 'border-left:1px solid #000;border-right:1px solid #000;border-top:none;border-bottom:none;padding:3px 5px;vertical-align:top;';
     const LRB = 'border-left:1px solid #000;border-right:1px solid #000;border-top:none;border-bottom:1px solid #000;padding:3px 5px;vertical-align:top;';
 
     const itemRows = items.map((it, i) => {
@@ -88,16 +124,25 @@ export const generateInvoiceHTML = (data: InvoiceData, vehicleNo: string = '') =
         if (it.id === 'vs-gn-500ml-box' || it.id === 'vs-gn-1l-box') {
             description = description.replace(/\s*BOX$/i, '');
         }
+
+        // Renames Box sizes strictly for the Invoice layout
+        description = description.replace('1 BOX (50X100ML)', '100ML BOX');
+        description = description.replace('1 BOX (25X200ML)', '200ML BOX');
+        description = description.replace('1 BOX (20X500ML)', '500ML BOX');
+        description = description.replace('1 BOX (10X1L)', '1LTR BOX');
+        description = description.replace('1 BOX (5X2L)', '2LTR BOX');
+        description = description.replace('1 LTR (10X100ML)', '100ML');
+        description = description.replace('1 LTR (5X200ML)', '200ML');
         let u = (it.unit || 'NOS').toUpperCase();
 
         if (it.id === 'vs-gn-500ml-box' || it.id === 'vs-gn-1l-box' || it.id.endsWith('-box')) {
             u = 'BOX';
-        } else if (/\b15\s*(LTR|KG|L|T|TIN)\b/i.test(description))              u = 'TIN';
-        else if (/\b5\s*(LTR|KG|L|CAN)\b/i.test(description))            u = 'CAN';
+        } else if (/\b15\s*(LTR|KG|L|T|TIN)\b/i.test(description)) u = 'TIN';
+        else if (/\b5\s*(LTR|KG|L|CAN)\b/i.test(description)) u = 'CAN';
         else if (/\bBOX\b/i.test(description) || it.id.includes('_box')) u = 'BOX';
         else if (it.id.endsWith('_ltr') && (it.size.toLowerCase() === '100 ml' || it.size.toLowerCase() === '200 ml' || it.size.toLowerCase() === '500 ml')) u = 'LTR';
-        else if (/\b(100|200|500)\s*ML\b/i.test(description))            u = 'PCS';
-        else if (u === 'LITRE')                                          u = 'PCS';
+        else if (/\b(100|200|500)\s*ML\b/i.test(description)) u = 'PCS';
+        else if (u === 'LITRE') u = 'PCS';
 
         return `<tr>
     <td style="${LR}text-align:center;">${i + 1}</td>
@@ -193,11 +238,11 @@ ${itemRows}
 <!-- Total -->
 <tr style="font-weight:bold;">
     <td style="${B}"></td>
-    <td style="${B}text-align:right;">Total</td>
-    <td style="${B}text-align:center;">${totalQty}</td>
+    <td style="${B}text-align:right;font-size:14px;">Total</td>
+    <td style="${B}text-align:center;font-size:14px;">${totalQty}</td>
     <td style="${B}"></td>
     <td style="${B}"></td>
-    <td style="${B}text-align:right;font-size:12px;">&#8377; ${totalAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+    <td style="${B}text-align:right;font-size:20px;font-weight:bold;">&#8377; ${totalAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
 </tr>
 
 <!-- Amount + Declaration in ONE full-width cell; E.&O.E floated right (no internal column line) -->
@@ -233,6 +278,16 @@ ${itemRows}
 <div style="text-align:center;font-size:9px;margin-top:6px;line-height:1.8;">
     <b>SUBJECT TO SALEM JURISDICTION</b><br>
     This is a Computer Generated Invoice
+    <div style="display: flex; justify-content: center; gap: 250px; margin-top: 8px;">
+        <div style="text-align: center;">
+            <img src="${generateQRCodeDataURL(upiLink1)}" width="85" height="85" style="display: block; margin: 0 auto 3px;" alt="Scan to Pay 1" />
+            <div style="font-size: 8px; font-weight: bold; line-height: 1.2; color: #333;">GPay/PhonePe/Paytm<br>${upiId1}</div>
+        </div>
+        <div style="text-align: center;">
+            <img src="${generateQRCodeDataURL(upiLink2)}" width="85" height="85" style="display: block; margin: 0 auto 3px;" alt="Scan to Pay 2" />
+            <div style="font-size: 8px; font-weight: bold; line-height: 1.2; color: #333;">Scan & Pay<br>${upiId2}</div>
+        </div>
+    </div>
 </div>
 
 </div>`;
@@ -240,6 +295,27 @@ ${itemRows}
     return `<html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script>
+      function captureAsImage() {
+        if (typeof html2canvas === 'undefined') {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'CAPTURE_ERROR', error: 'Image library still loading, please try again in a second.' }));
+          return;
+        }
+        // Capture only the first invoice container (.bp class)
+        const element = document.querySelector('.bp') || document.body;
+        html2canvas(element, {
+          scale: 3,
+          useCORS: true,
+          backgroundColor: '#ffffff'
+        }).then(function(canvas) {
+          const dataUrl = canvas.toDataURL('image/png');
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'CAPTURE_IMAGE', dataUrl: dataUrl }));
+        }).catch(function(error) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'CAPTURE_ERROR', error: error.toString() }));
+        });
+      }
+    </script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 

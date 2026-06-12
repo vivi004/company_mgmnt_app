@@ -5,9 +5,11 @@ import {
     addExpense as apiAddExpense, 
     updateExpense as apiUpdateExpense, 
     deleteExpense as apiDeleteExpense,
+    recordProductReturn as apiRecordProductReturn,
     DailyCollection,
     Expense
 } from '../../../services/collectionService';
+import { collectPayment as apiCollectPayment, adjustBalance as apiAdjustBalance } from '../../../services/shopService';
 import { getTodayIST } from '../../../utils/dateUtils';
 
 export const useCollections = (orderLines: any[]) => {
@@ -30,9 +32,9 @@ export const useCollections = (orderLines: any[]) => {
         fetchCollections();
     }, [selectedOlId, selectedDate]);
 
-    const fetchCollections = async () => {
+    const fetchCollections = async (silent = false) => {
         if (!selectedOlId || !selectedDate) return;
-        setLoading(true);
+        if (!silent) setLoading(true);
         try {
             const data = await fetchCollectionsByOrderLine(selectedOlId, selectedDate);
             const sortedCollections = (data.collections || []).sort((a, b) => {
@@ -44,40 +46,172 @@ export const useCollections = (orderLines: any[]) => {
             setExpenses(data.expenses);
         } catch (err) {
             console.error('Failed to fetch collections:', err);
-            setCollections([]);
-            setExpenses([]);
+            if (!silent) {
+                setCollections([]);
+                setExpenses([]);
+            }
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
+        }
+    };
+
+    const collectPayment = async (shopId: number, amount: number, method: string, description: string, userName: string) => {
+        const originalCollections = [...collections];
+        
+        setCollections(prev => prev.map(row => {
+            if (row.shop_id !== shopId) return row;
+            
+            const cashAdd = method === 'Cash' ? amount : 0;
+            const upiAdd = ['UPI', 'PhonePe', 'GPay', 'Paytm', 'Other UPI'].includes(method) ? amount : 0;
+            const chequeAdd = method === 'Cheque' ? amount : 0;
+            const discountAdd = method === 'Discount' ? amount : 0;
+            
+            const newCash = row.cash_collected + cashAdd;
+            const newUpi = row.upi_collected + upiAdd;
+            const newCheque = row.cheque_collected + chequeAdd;
+            const newDiscount = (row.discount_payment || 0) + discountAdd;
+            const newTotalBalance = Math.max(0, row.total_balance - amount);
+            
+            return {
+                ...row,
+                cash_collected: newCash,
+                upi_collected: newUpi,
+                cheque_collected: newCheque,
+                discount_payment: newDiscount,
+                total_balance: newTotalBalance
+            };
+        }));
+
+        try {
+            const cash_amount = method === 'Cash' ? amount : 0;
+            const upi_amount = ['UPI', 'PhonePe', 'GPay', 'Paytm', 'Other UPI'].includes(method) ? amount : 0;
+            const cheque_amount = method === 'Cheque' ? amount : 0;
+
+            await apiCollectPayment(shopId, {
+                amount: amount,
+                payment_method: method,
+                cash_amount,
+                upi_amount,
+                cheque_amount,
+                description: description || `${method} payment collected by ${userName}`,
+                created_by: userName,
+                collection_date: selectedDate
+            });
+            await fetchCollections(true);
+        } catch (err: any) {
+            setCollections(originalCollections);
+            throw err;
+        }
+    };
+
+    const adjustBalance = async (shopId: number, amount: number, method: string, description: string, adminName: string) => {
+        const originalCollections = [...collections];
+        
+        setCollections(prev => prev.map(row => {
+            if (row.shop_id !== shopId) return row;
+            
+            const newManualAdjust = (row.manual_adjustments || 0) + amount;
+            const newTotalBalance = Math.max(0, row.total_balance + amount);
+            
+            return {
+                ...row,
+                manual_adjustments: newManualAdjust,
+                total_balance: newTotalBalance
+            };
+        }));
+
+        try {
+            await apiAdjustBalance(shopId, {
+                amount: amount,
+                description: description,
+                payment_method: amount < 0 ? method : null,
+                created_by: adminName,
+                collection_date: selectedDate
+            });
+            await fetchCollections(true);
+        } catch (err: any) {
+            setCollections(originalCollections);
+            throw err;
         }
     };
 
     const addExpense = async (amount: number, description: string) => {
         if (!selectedOlId || !selectedDate) return;
+        const originalExpenses = [...expenses];
+
+        const tempId = -Date.now();
+        const newExpense: Expense = {
+            id: tempId,
+            amount: amount,
+            description: description,
+            order_line_id: selectedOlId,
+            expense_date: selectedDate
+        };
+
+        setExpenses(prev => [...prev, newExpense]);
+
         try {
             await apiAddExpense(selectedOlId, amount, description, selectedDate);
-            await fetchCollections();
+            await fetchCollections(true);
         } catch (err) {
-            console.error('Failed to add expense:', err);
+            setExpenses(originalExpenses);
             throw err;
         }
     };
 
     const updateExpense = async (id: number, amount: number, description: string) => {
+        const originalExpenses = [...expenses];
+
+        setExpenses(prev => prev.map(e => {
+            if (e.id !== id) return e;
+            return { ...e, amount, description };
+        }));
+
         try {
             await apiUpdateExpense(id, amount, description);
-            await fetchCollections();
+            await fetchCollections(true);
         } catch (err) {
-            console.error('Failed to update expense:', err);
+            setExpenses(originalExpenses);
             throw err;
         }
     };
 
     const deleteExpense = async (id: number) => {
+        const originalExpenses = [...expenses];
+
+        setExpenses(prev => prev.filter(e => e.id !== id));
+
         try {
             await apiDeleteExpense(id);
-            await fetchCollections();
+            await fetchCollections(true);
         } catch (err) {
-            console.error('Failed to delete expense:', err);
+            setExpenses(originalExpenses);
+            throw err;
+        }
+    };
+
+    const recordProductReturn = async (shopId: number, productName: string, amount: number) => {
+        if (!selectedDate) return;
+        const originalCollections = [...collections];
+
+        setCollections(prev => prev.map(row => {
+            if (row.shop_id !== shopId) return row;
+            
+            const newReturn = (row.return_amount || 0) + amount;
+            const newTotalBalance = Math.max(0, row.total_balance - amount);
+            
+            return {
+                ...row,
+                return_amount: newReturn,
+                total_balance: newTotalBalance
+            };
+        }));
+
+        try {
+            await apiRecordProductReturn(shopId, productName, amount, selectedDate);
+            await fetchCollections(true);
+        } catch (err) {
+            setCollections(originalCollections);
             throw err;
         }
     };
@@ -97,9 +231,10 @@ export const useCollections = (orderLines: any[]) => {
                     totalFutureBills: acc.totalFutureBills + (row.future_bills || 0),
                     totalBalance: acc.totalBalance + row.total_balance,
                     totalOldBalance: acc.totalOldBalance + (row.old_balance || 0),
+                    totalReturnAmount: acc.totalReturnAmount + (row.return_amount || 0),
                 };
             },
-            { amountCollected: 0, todaysBillAmount: 0, todaysBillBalance: 0, totalManualAdjust: 0, totalFutureBills: 0, totalBalance: 0, totalOldBalance: 0 }
+            { amountCollected: 0, todaysBillAmount: 0, todaysBillBalance: 0, totalManualAdjust: 0, totalFutureBills: 0, totalBalance: 0, totalOldBalance: 0, totalReturnAmount: 0 }
         );
     }, [collections]);
 
@@ -155,6 +290,9 @@ export const useCollections = (orderLines: any[]) => {
         refresh: fetchCollections,
         addExpense,
         updateExpense,
-        deleteExpense
+        deleteExpense,
+        recordProductReturn,
+        collectPayment,
+        adjustBalance
     };
 };

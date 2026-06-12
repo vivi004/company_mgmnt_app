@@ -2,18 +2,22 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
     View, Text, ScrollView, TouchableOpacity,
     ActivityIndicator, Alert, RefreshControl, Modal, 
-    KeyboardAvoidingView, Platform, TextInput, FlatList
+    KeyboardAvoidingView, Platform, TextInput, FlatList,
+    Keyboard, PanResponder, Animated, LayoutAnimation, UIManager
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
 
 import { useCollections } from './useCollections';
 import { useShopActions } from './useShopActions';
 import ShopActionModals from '../../../components/shop/ShopActionModals';
+import { RouteSortModal } from '../../../components/shop/RouteSortModal';
 import { FontAwesome, MaterialIcons, Ionicons, Feather } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from 'expo-router';
 import { DrawerActions } from '@react-navigation/native';
-import { fetchOrderLines, addExpense } from '../../../services/collectionService';
+import { fetchOrderLines, addExpense, fetchOverallReturns } from '../../../services/collectionService';
 import { fetchShopLedger } from '../../../services/shopService';
 import { getUserData } from '../../../services/authService';
 import { formatIST, parseIST, getTodayIST } from '../../../utils/dateUtils';
@@ -28,19 +32,102 @@ const TodayCollectionScreen = () => {
     const [orderLines, setOrderLines] = useState<any[]>([]);
     const [loadingOls, setLoadingOls] = useState(true);
 
+    const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+    const [showSortOlsModal, setShowSortOlsModal] = useState(false);
+
+    useEffect(() => {
+        const showListener = Keyboard.addListener(
+            Platform.OS === 'android' ? 'keyboardDidShow' : 'keyboardWillShow',
+            (e) => {
+                if (Platform.OS === 'android') {
+                    setKeyboardHeight(e.endCoordinates.height);
+                }
+            }
+        );
+        const hideListener = Keyboard.addListener(
+            Platform.OS === 'android' ? 'keyboardDidHide' : 'keyboardWillHide',
+            () => {
+                setKeyboardHeight(0);
+            }
+        );
+
+        return () => {
+            showListener.remove();
+            hideListener.remove();
+        };
+    }, []);
+
     const {
         selectedDate, setSelectedDate,
         selectedOlId, setSelectedOlId,
         collections, loading,
         totals, modeBreakdown,
-        refresh, addExpense, updateExpense, deleteExpense, expenses
+        refresh, addExpense, updateExpense, deleteExpense, expenses,
+        recordProductReturn,
+        collectPayment,
+        adjustBalance
     } = useCollections(orderLines);
 
     const {
         selectedShop, setSelectedShop,
         showAdjustModal, setShowAdjustModal, adjData, setAdjData, submittingAdj, handleAdjustment,
         showPaymentModal, setShowPaymentModal, paymentData, setPaymentData, submittingPayment, handleCollectPayment,
-    } = useShopActions(() => refresh(), selectedDate);
+    } = useShopActions(() => refresh(), selectedDate, collectPayment, adjustBalance);
+
+    // Product Return States
+    const [showReturnModal, setShowReturnModal] = useState(false);
+    const [returnProductName, setReturnProductName] = useState('');
+    const [returnAmount, setReturnAmount] = useState('');
+    const [submittingReturn, setSubmittingReturn] = useState(false);
+
+    // Overall Returns Modal States
+    const [showOverallReturnsModal, setShowOverallReturnsModal] = useState(false);
+    const [overallReturns, setOverallReturns] = useState<any[]>([]);
+    const [loadingOverallReturns, setLoadingOverallReturns] = useState(false);
+
+    const handleSaveProductReturn = async () => {
+        if (!selectedShop || submittingReturn) return;
+        const amount = parseFloat(returnAmount);
+        if (isNaN(amount) || amount <= 0) {
+            return Alert.alert('Error', 'Enter a valid return amount');
+        }
+        if (!returnProductName.trim()) {
+            return Alert.alert('Error', 'Enter a product name');
+        }
+
+        setSubmittingReturn(true);
+
+        // Close modal and reset fields instantly
+        setShowReturnModal(false);
+        const shopId = selectedShop.shop_id;
+        const prodName = returnProductName.trim();
+        setReturnProductName('');
+        setReturnAmount('');
+        setSelectedShop(null);
+
+        try {
+            await recordProductReturn(shopId, prodName, amount);
+            Alert.alert('Success', 'Product return recorded successfully');
+        } catch (err: any) {
+            Alert.alert('Error', err.message || 'Failed to record product return');
+        } finally {
+            setSubmittingReturn(false);
+        }
+    };
+
+    const handleFetchOverallReturns = async () => {
+        setShowOverallReturnsModal(true);
+        setLoadingOverallReturns(true);
+        try {
+            const data = await fetchOverallReturns(selectedDate);
+            setOverallReturns(data || []);
+        } catch (error) {
+            Alert.alert('Error', 'Failed to fetch overall returns');
+        } finally {
+            setLoadingOverallReturns(false);
+        }
+    };
 
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
@@ -91,6 +178,8 @@ const TodayCollectionScreen = () => {
 
     // Midnight Rollover Logic
     useEffect(() => {
+        let timerId: NodeJS.Timeout;
+
         const checkMidnight = () => {
             const now = new Date();
             const tomorrow = new Date(now);
@@ -99,18 +188,18 @@ const TodayCollectionScreen = () => {
             
             const msUntilMidnight = tomorrow.getTime() - now.getTime();
             
-            const timer = setTimeout(() => {
+            timerId = setTimeout(() => {
                 const newToday = getTodayIST();
                 setSelectedDate(newToday);
                 refresh();
                 checkMidnight(); // Re-schedule for next day
             }, msUntilMidnight);
-            
-            return timer;
         };
 
-        const timerId = checkMidnight();
-        return () => clearTimeout(timerId);
+        checkMidnight();
+        return () => {
+            if (timerId) clearTimeout(timerId);
+        };
     }, []);
 
     // Expense States
@@ -118,23 +207,66 @@ const TodayCollectionScreen = () => {
     const [expenseAmount, setExpenseAmount] = useState('');
     const [expenseDescription, setExpenseDescription] = useState('');
     const [submittingExpense, setSubmittingExpense] = useState(false);
+    const [editingExpenseId, setEditingExpenseId] = useState<number | null>(null);
 
-    const handleAddExpense = async () => {
+    const handleSaveExpense = async () => {
         if (!expenseAmount || isNaN(parseFloat(expenseAmount))) {
             return Alert.alert('Error', 'Enter a valid amount');
         }
         setSubmittingExpense(true);
+
+        const amount = parseFloat(expenseAmount);
+        const description = expenseDescription;
+        const editingId = editingExpenseId;
+
+        // Dismiss modal instantly and reset fields
+        setShowExpenseModal(false);
+        setExpenseAmount('');
+        setExpenseDescription('');
+        setEditingExpenseId(null);
+
         try {
-            await addExpense(parseFloat(expenseAmount), expenseDescription);
-            setShowExpenseModal(false);
-            setExpenseAmount('');
-            setExpenseDescription('');
-            Alert.alert('Success', 'Expense recorded');
+            if (editingId !== null) {
+                await updateExpense(editingId, amount, description);
+                Alert.alert('Success', 'Expense updated');
+            } else {
+                await addExpense(amount, description);
+                Alert.alert('Success', 'Expense recorded');
+            }
         } catch (err) {
-            Alert.alert('Error', 'Failed to record expense');
+            Alert.alert('Error', editingId !== null ? 'Failed to update expense' : 'Failed to record expense');
         } finally {
             setSubmittingExpense(false);
         }
+    };
+
+    const handleOpenEditExpense = (exp: any) => {
+        setEditingExpenseId(exp.id);
+        setExpenseAmount(String(exp.amount));
+        setExpenseDescription(exp.description || '');
+        setShowExpenseModal(true);
+    };
+
+    const confirmDeleteExpense = (id: number) => {
+        Alert.alert(
+            'Confirm Delete',
+            'Are you sure you want to delete this expense?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                { 
+                    text: 'Delete', 
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await deleteExpense(id);
+                            Alert.alert('Success', 'Expense deleted');
+                        } catch (err) {
+                            Alert.alert('Error', 'Failed to delete expense');
+                        }
+                    }
+                }
+            ]
+        );
     };
 
     useEffect(() => {
@@ -163,6 +295,24 @@ const TodayCollectionScreen = () => {
                     }
                 }
 
+                // Apply custom order line sorting if saved in AsyncStorage
+                try {
+                    const storedOrder = await AsyncStorage.getItem('customOrderLineSort');
+                    if (storedOrder) {
+                        const parsedIds: number[] = JSON.parse(storedOrder);
+                        filteredOls.sort((a: any, b: any) => {
+                            const idxA = parsedIds.indexOf(a.id);
+                            const idxB = parsedIds.indexOf(b.id);
+                            if (idxA === -1 && idxB === -1) return 0;
+                            if (idxA === -1) return 1;
+                            if (idxB === -1) return -1;
+                            return idxA - idxB;
+                        });
+                    }
+                } catch (e) {
+                    console.error('Failed to parse customOrderLineSort:', e);
+                }
+
                 setOrderLines(filteredOls);
             } catch (error) {
                 console.error('Failed to load order lines:', error);
@@ -177,14 +327,20 @@ const TodayCollectionScreen = () => {
     const onDateChange = (event: any, date?: Date) => {
         setShowDatePicker(false);
         if (date) {
-            setSelectedDate(date.toISOString().split('T')[0]);
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            setSelectedDate(`${year}-${month}-${day}`);
         }
     };
 
     const shiftDate = (days: number) => {
-        const d = new Date(selectedDate);
+        const d = new Date(selectedDate + 'T12:00:00'); // set to local noon to avoid timezone boundary issues
         d.setDate(d.getDate() + days);
-        setSelectedDate(d.toISOString().split('T')[0]);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        setSelectedDate(`${year}-${month}-${day}`);
     };
 
     const onRefresh = useCallback(async () => {
@@ -209,7 +365,7 @@ const TodayCollectionScreen = () => {
                     <Text className="text-base font-black tracking-tighter text-slate-900 italic">📊 Collections</Text>
 
                     <TouchableOpacity
-                        onPress={refresh}
+                        onPress={() => refresh()}
                         disabled={loading}
                         className="w-9 h-9 items-center justify-center bg-slate-50 rounded-xl border border-slate-100"
                     >
@@ -219,8 +375,8 @@ const TodayCollectionScreen = () => {
 
                 {/* Date Navigator */}
                 <View className="mx-3 flex-row items-center bg-slate-50 rounded-xl border border-slate-100 px-1">
-                    <TouchableOpacity onPress={() => shiftDate(-1)} className="p-1.5">
-                        <Ionicons name="chevron-back" size={18} color="#64748b" />
+                    <TouchableOpacity onPress={() => shiftDate(-1)} className="p-3">
+                        <Ionicons name="chevron-back" size={24} color="#64748b" />
                     </TouchableOpacity>
                     <TouchableOpacity
                         onPress={() => setShowDatePicker(true)}
@@ -231,8 +387,8 @@ const TodayCollectionScreen = () => {
                             {formatIST(selectedDate, { day: '2-digit', month: 'short', year: 'numeric', hour: undefined, minute: undefined })}
                         </Text>
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => shiftDate(1)} className="p-1.5">
-                        <Ionicons name="chevron-forward" size={18} color="#64748b" />
+                    <TouchableOpacity onPress={() => shiftDate(1)} className="p-3">
+                        <Ionicons name="chevron-forward" size={24} color="#64748b" />
                     </TouchableOpacity>
                 </View>
 
@@ -252,6 +408,14 @@ const TodayCollectionScreen = () => {
                     </View>
                 ) : (
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 6 }}>
+                        <TouchableOpacity
+                            onPress={() => setShowSortOlsModal(true)}
+                            className="mr-2 px-3 py-1.5 rounded-lg border border-dashed border-blue-400 bg-blue-50 flex-row items-center animate-pulse"
+                        >
+                            <Feather name="sliders" size={10} color="#2563eb" style={{ marginRight: 4 }} />
+                            <Text className="text-[9px] font-black uppercase tracking-widest text-blue-600">Sort</Text>
+                        </TouchableOpacity>
+
                         {orderLines.map(ol => (
                             <TouchableOpacity
                                 key={ol.id}
@@ -276,6 +440,7 @@ const TodayCollectionScreen = () => {
                     {[
                         { label: 'Billed', value: `₹${fmt(totals.todaysBillAmount)}`, icon: '🧾' },
                         { label: 'Collected', value: `₹${fmt(totals.amountCollected)}`, icon: '💰' },
+                        { label: 'Returns', value: `₹${fmt(totals.totalReturnAmount || 0)}`, icon: '↩️' },
                         { label: 'Upcoming', value: `₹${fmt(totals.totalFutureBills)}`, icon: '📅' },
                         { label: 'Manual', value: `₹${fmt(totals.totalManualAdjust)}`, icon: '⚖️' },
                         { label: 'Pending', value: `₹${fmt(totals.todaysBillBalance)}`, icon: '⏳' },
@@ -340,9 +505,20 @@ const TodayCollectionScreen = () => {
                     })}
                 </View>
 
-                {/* Collection count label */}
+                {/* Collection count label & View Return Products */}
                 <View className="mx-4 mb-2 mt-3 flex-row items-center justify-between">
-                    <Text className="text-[9px] font-black uppercase tracking-widest text-slate-400">📋 Collection Details</Text>
+                    <View className="flex-row items-center gap-2">
+                        <Text className="text-[9px] font-black uppercase tracking-widest text-slate-400">📋 Collection Details</Text>
+                        
+                        <TouchableOpacity
+                            onPress={handleFetchOverallReturns}
+                            className="bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full flex-row items-center"
+                        >
+                            <Text className="text-amber-700 text-[8px] font-black uppercase tracking-wider">
+                                ↩ View Returns ({totals.totalReturnAmount > 0 ? `₹${fmt(totals.totalReturnAmount)}` : '₹0.00'})
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
                     <Text className="text-[9px] font-bold text-slate-400">
                         {collections.filter(r => {
                             const isMatch = !shopSearch ||
@@ -394,7 +570,7 @@ const TodayCollectionScreen = () => {
                                 <View className="flex-row items-center justify-between mb-3">
                                     <View className="flex-1 mr-2">
                                         <Text className="text-base font-black text-slate-900">{idx + 1}. {row.shop_name}</Text>
-                                        <Text className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{row.owner_name || 'No Area Name'}</Text>
+                                        <Text className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{row.owner_name || 'No Owner Name'}</Text>
                                     </View>
                                     {row.pending_transactions.length > 0 && (
                                         <View className="bg-amber-500 px-2 py-0.5 rounded-full">
@@ -407,6 +583,10 @@ const TodayCollectionScreen = () => {
                                     <View className="flex-1">
                                         <Text className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Prev Bal</Text>
                                         <Text className="text-sm font-black text-slate-700">₹{fmt(row.old_balance)}</Text>
+                                    </View>
+                                    <View className="flex-1 items-center">
+                                        <Text className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Returns</Text>
+                                        <Text className="text-sm font-black text-amber-600">₹{fmt(row.return_amount || 0)}</Text>
                                     </View>
                                     <View className="flex-1 items-end">
                                         <Text className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Today Bill</Text>
@@ -430,19 +610,25 @@ const TodayCollectionScreen = () => {
                                         onPress={() => { setSelectedShop(row); setShowPaymentModal(true); }}
                                         className="flex-1 bg-emerald-500 py-2.5 rounded-xl items-center shadow-sm"
                                     >
-                                        <Text className="text-white font-black text-[10px] uppercase tracking-widest">Collect ₹</Text>
+                                        <Text className="text-white font-black text-[9px] uppercase tracking-tighter">Collect ₹</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity 
+                                        onPress={() => { setSelectedShop(row); setShowReturnModal(true); }}
+                                        className="flex-1 bg-amber-500 py-2.5 rounded-xl items-center shadow-sm"
+                                    >
+                                        <Text className="text-white font-black text-[9px] uppercase tracking-tighter">Return ↩</Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity 
                                         onPress={() => { setSelectedShop(row); setShowAdjustModal(true); }}
                                         className="flex-1 bg-blue-500 py-2.5 rounded-xl items-center shadow-sm"
                                     >
-                                        <Text className="text-white font-black text-[10px] uppercase tracking-widest">Adjust ±</Text>
+                                        <Text className="text-white font-black text-[9px] uppercase tracking-tighter">Adjust ±</Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity 
                                         onPress={() => fetchLedger(row)}
                                         className="flex-1 bg-indigo-500 py-2.5 rounded-xl items-center shadow-sm"
                                     >
-                                        <Text className="text-white font-black text-[10px] uppercase tracking-widest">Ledger 👁</Text>
+                                        <Text className="text-white font-black text-[9px] uppercase tracking-tighter">Ledger 👁</Text>
                                     </TouchableOpacity>
                                 </View>
                             </View>
@@ -457,17 +643,56 @@ const TodayCollectionScreen = () => {
 
                 <View className="bg-white border border-slate-100 rounded-3xl p-5 mb-10 shadow-sm">
                     {[
-                        { icon: '💵', label: 'Cash (Net)', amount: modeBreakdown.netCash, color: 'emerald' },
+                        { icon: '💵', label: 'Cash (Net)', amount: modeBreakdown.netCash, color: 'emerald', isNet: true },
                         { icon: '📱', label: 'UPI', amount: modeBreakdown.upi, color: 'blue' },
                         { icon: '📝', label: 'Cheque', amount: modeBreakdown.cheque, color: 'amber' },
                         { icon: '🏷️', label: 'Discount', amount: modeBreakdown.discount, color: 'slate' },
                     ].map((mode, idx) => (
-                        <View key={idx} className={`flex-row items-center justify-between py-3 ${idx !== 3 ? 'border-b border-slate-50' : ''}`}>
+                        <View key={idx} className={`flex-row items-center justify-between py-3 ${(idx !== 3 || expenses.length > 0) ? 'border-b border-slate-50' : ''}`}>
                             <View className="flex-row items-center">
                                 <Text className="text-xl mr-3">{mode.icon}</Text>
                                 <Text className="text-xs font-black uppercase tracking-widest text-slate-700">{mode.label}</Text>
                             </View>
-                            <Text className="text-sm font-black text-slate-900">₹{fmt(mode.amount)}</Text>
+                            {mode.isNet && modeBreakdown.totalExpenses > 0 ? (
+                                <View className="items-end">
+                                    <Text className="text-sm font-black text-slate-900">₹{fmt(mode.amount)}</Text>
+                                    <Text className="text-[10px] font-bold text-slate-400 mt-0.5">
+                                        (₹{fmt(modeBreakdown.rawCash)} - ₹{fmt(modeBreakdown.totalExpenses)})
+                                    </Text>
+                                </View>
+                            ) : (
+                                <Text className="text-sm font-black text-slate-900">₹{fmt(mode.amount)}</Text>
+                            )}
+                        </View>
+                    ))}
+
+                    {/* --- Individual Expenses --- */}
+                    {expenses.map((exp, eIdx) => (
+                        <View 
+                            key={`exp-${exp.id || eIdx}`} 
+                            className={`flex-row items-center justify-between py-3 pl-4 border-b border-dashed border-amber-200/50 bg-amber-50/15 rounded-2xl my-1 px-3`}
+                        >
+                            <View className="flex-row items-center flex-1 mr-2">
+                                <Text className="text-base mr-2">☕</Text>
+                                <Text className="text-[10px] font-black uppercase tracking-widest text-amber-700" numberOfLines={2}>Expense: {exp.description || 'General'}</Text>
+                            </View>
+                            <View className="flex-row items-center gap-3">
+                                <Text className="text-sm font-black text-amber-600">-₹{fmt(exp.amount)}</Text>
+                                <View className="flex-row items-center gap-1.5">
+                                    <TouchableOpacity 
+                                        onPress={() => handleOpenEditExpense(exp)}
+                                        className="p-1.5 bg-slate-50 border border-slate-100 rounded-lg"
+                                    >
+                                        <Feather name="edit-2" size={10} color="#3b82f6" />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity 
+                                        onPress={() => confirmDeleteExpense(exp.id)}
+                                        className="p-1.5 bg-slate-50 border border-slate-100 rounded-lg"
+                                    >
+                                        <Feather name="trash-2" size={10} color="#ef4444" />
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
                         </View>
                     ))}
                     
@@ -494,21 +719,41 @@ const TodayCollectionScreen = () => {
                 setPaymentData={setPaymentData}
                 submittingPayment={submittingPayment}
                 handleCollectPayment={handleCollectPayment}
+                showReturnModal={showReturnModal}
+                setShowReturnModal={setShowReturnModal}
+                returnProductName={returnProductName}
+                setReturnProductName={setReturnProductName}
+                returnAmount={returnAmount}
+                setReturnAmount={setReturnAmount}
+                submittingReturn={submittingReturn}
+                handleSaveProductReturn={handleSaveProductReturn}
             />
 
-            {/* --- Expense Modal --- */}
-            <Modal visible={showExpenseModal} animationType="slide" transparent>
+            <Modal visible={showExpenseModal} animationType="slide" transparent statusBarTranslucent={true}>
                 <KeyboardAvoidingView 
                     behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                     className="flex-1 justify-end bg-black/50"
                 >
-                    <View className="bg-white rounded-t-[40px] p-6 pb-10 shadow-xl">
+                    <View 
+                        className="bg-white rounded-t-[40px] p-6 pb-10 shadow-xl"
+                        style={{ paddingBottom: Platform.OS === 'android' ? Math.max(keyboardHeight, 40) : 40 }}
+                    >
                         <View className="flex-row items-center justify-between mb-6">
                             <View>
-                                <Text className="text-xl font-black italic text-slate-900 tracking-tight">Record Expense</Text>
+                                <Text className="text-xl font-black italic text-slate-900 tracking-tight">
+                                    {editingExpenseId !== null ? 'Edit Expense' : 'Record Expense'}
+                                </Text>
                                 <Text className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Operational Costs</Text>
                             </View>
-                            <TouchableOpacity onPress={() => setShowExpenseModal(false)} className="p-2 bg-slate-100 rounded-full">
+                            <TouchableOpacity 
+                                onPress={() => {
+                                    setShowExpenseModal(false);
+                                    setExpenseAmount('');
+                                    setExpenseDescription('');
+                                    setEditingExpenseId(null);
+                                }} 
+                                className="p-2 bg-slate-100 rounded-full"
+                            >
                                 <Ionicons name="close" size={20} color="#64748b" />
                             </TouchableOpacity>
                         </View>
@@ -536,7 +781,7 @@ const TodayCollectionScreen = () => {
                             </View>
 
                             <TouchableOpacity
-                                onPress={handleAddExpense}
+                                onPress={handleSaveExpense}
                                 disabled={submittingExpense}
                                 className={`mt-6 py-4 rounded-2xl items-center shadow-lg ${submittingExpense ? 'bg-slate-300' : 'bg-slate-900 shadow-slate-900/30'}`}
                             >
@@ -574,7 +819,7 @@ const TodayCollectionScreen = () => {
                 </TouchableOpacity>
             </View>
             {/* Ledger Modal */}
-            <Modal visible={showLedgerModal} animationType="fade" transparent>
+            <Modal visible={showLedgerModal} animationType="fade" transparent statusBarTranslucent={true}>
                 <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.8)' }}>
                     <View style={{ flex: 1, marginTop: 80, backgroundColor: '#FFFFFF', borderTopLeftRadius: 40, borderTopRightRadius: 40, padding: 24 }}>
                         <View className="flex-row items-center justify-between mb-8">
@@ -722,7 +967,99 @@ const TodayCollectionScreen = () => {
                      </View>
                  </View>
              </Modal>
-         </SafeAreaView>
+ 
+            {/* Overall Returns Modal */}
+            <Modal 
+                visible={showOverallReturnsModal} 
+                animationType="fade" 
+                transparent
+                statusBarTranslucent={true}
+                onRequestClose={() => setShowOverallReturnsModal(false)}
+            >
+                <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.8)' }}>
+                    <View style={{ flex: 1, marginTop: 80, backgroundColor: '#FFFFFF', borderTopLeftRadius: 40, borderTopRightRadius: 40, padding: 24 }}>
+                        <View className="flex-row items-center justify-between mb-8">
+                            <View>
+                                <Text className="text-2xl font-black italic tracking-tight text-slate-900">Returned Products</Text>
+                                <Text className="text-xs font-black text-amber-500 uppercase tracking-widest mt-1">
+                                    {formatIST(selectedDate, { day: '2-digit', month: 'short', year: 'numeric', hour: undefined, minute: undefined })}
+                                </Text>
+                            </View>
+                            <TouchableOpacity 
+                                onPress={() => setShowOverallReturnsModal(false)}
+                                className="w-10 h-10 items-center justify-center bg-slate-50 rounded-full"
+                            >
+                                <Feather name="x" size={20} color="#94A3B8" />
+                            </TouchableOpacity>
+                        </View>
+ 
+                        {loadingOverallReturns ? (
+                            <View className="flex-1 items-center justify-center">
+                                <ActivityIndicator size="large" color="#d97706" />
+                                <Text className="text-slate-400 font-black text-[10px] uppercase tracking-widest mt-4">Loading returns...</Text>
+                            </View>
+                        ) : overallReturns.length === 0 ? (
+                            <View className="flex-1 items-center justify-center px-12">
+                                <Text className="text-amber-500 text-6xl mb-6">↩️</Text>
+                                <Text className="text-slate-400 font-bold text-center text-lg">No product returns recorded for this date.</Text>
+                            </View>
+                        ) : (
+                            <View className="flex-1">
+                                <FlatList
+                                    data={overallReturns}
+                                    keyExtractor={(item, index) => `${item.id || index}`}
+                                    showsVerticalScrollIndicator={false}
+                                    contentContainerStyle={{ paddingBottom: 24 }}
+                                    renderItem={({ item }) => (
+                                        <View className="border border-slate-100 rounded-[32px] p-5 mb-4 bg-white shadow-sm">
+                                            <View className="flex-row items-center justify-between">
+                                                <View className="flex-row items-center gap-4 flex-1">
+                                                    <View className="w-12 h-12 rounded-2xl items-center justify-center bg-amber-50">
+                                                        <Text className="text-amber-600 font-black text-lg">↩</Text>
+                                                    </View>
+                                                    <View className="flex-1 pr-2">
+                                                        <Text className="font-black text-slate-800 text-sm uppercase tracking-tight" numberOfLines={1}>
+                                                            {item.product_name}
+                                                        </Text>
+                                                        <Text className="text-[10px] font-black text-amber-500 uppercase tracking-widest mt-1" numberOfLines={1}>
+                                                            {item.shop_name}
+                                                        </Text>
+                                                    </View>
+                                                </View>
+                                                <View className="items-end">
+                                                    <Text className="text-lg font-black text-amber-600">
+                                                        ₹{Number(item.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                    </Text>
+                                                    <Text className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                                                        {formatIST(item.created_at || selectedDate)}
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                        </View>
+                                    )}
+                                />
+ 
+                                {/* Total Summary Section */}
+                                <View className="mt-4 pt-4 border-t-2 border-slate-100 flex-row items-center justify-between">
+                                    <Text className="text-base font-black uppercase tracking-widest text-amber-600">Total Returns</Text>
+                                    <Text className="text-2xl font-black text-slate-900">
+                                        ₹{fmt(overallReturns.reduce((sum, item) => sum + Number(item.amount || 0), 0))}
+                                    </Text>
+                                </View>
+                            </View>
+                        )}
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Arrange Routes Modal */}
+            <RouteSortModal
+                visible={showSortOlsModal}
+                onClose={() => setShowSortOlsModal(false)}
+                orderLines={orderLines}
+                onOrderChange={(newOrder) => setOrderLines(newOrder)}
+            />
+        </SafeAreaView>
     );
 };
 

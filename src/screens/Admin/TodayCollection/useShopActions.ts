@@ -3,7 +3,12 @@ import { collectPayment as apiCollectPayment, adjustBalance as apiAdjustBalance 
 import { getUserData } from '../../../services/authService';
 import { Alert } from 'react-native';
 
-export const useShopActions = (onSuccess?: () => void, collectionDate?: string) => {
+export const useShopActions = (
+    onSuccess?: () => void, 
+    collectionDate?: string,
+    collectPaymentOptimistic?: (shopId: number, amount: number, method: string, description: string, userName: string) => Promise<void>,
+    adjustBalanceOptimistic?: (shopId: number, amount: number, method: string, description: string, adminName: string) => Promise<void>
+) => {
     const [selectedShop, setSelectedShop] = useState<any | null>(null);
     
     // Adjustment States
@@ -15,8 +20,6 @@ export const useShopActions = (onSuccess?: () => void, collectionDate?: string) 
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [paymentData, setPaymentData] = useState({ 
         amount: '', 
-        dualCashAmount: '',
-        dualUpiAmount: '',
         method: 'Cash', 
         upiApp: 'PhonePe', 
         description: '' 
@@ -29,23 +32,30 @@ export const useShopActions = (onSuccess?: () => void, collectionDate?: string) 
         if (isNaN(amount)) return Alert.alert('Error', 'Enter a valid amount');
         
         setSubmittingAdj(true);
+
+        // Close modal and reset fields instantly
+        setShowAdjustModal(false);
+        const prevShop = selectedShop;
+        setSelectedShop(null);
+        setAdjData({ amount: '', description: '', method: 'Cash' });
+
         try {
             const userData = await getUserData();
             const adminName = userData?.first_name ? `${userData.first_name} ${userData.last_name || ''}`.trim() : 'Admin';
 
-            await apiAdjustBalance(selectedShop.shop_id, {
-                amount: amount,
-                description: adjData.description,
-                payment_method: amount < 0 ? adjData.method : null,
-                created_by: adminName,
-                collection_date: collectionDate
-            });
-            
+            if (adjustBalanceOptimistic) {
+                await adjustBalanceOptimistic(prevShop.shop_id, amount, amount < 0 ? adjData.method : 'Cash', adjData.description, adminName);
+            } else {
+                await apiAdjustBalance(prevShop.shop_id, {
+                    amount: amount,
+                    description: adjData.description,
+                    payment_method: amount < 0 ? adjData.method : null,
+                    created_by: adminName,
+                    collection_date: collectionDate
+                });
+                if (onSuccess) onSuccess();
+            }
             Alert.alert('Success', 'Balance adjusted!');
-            setShowAdjustModal(false);
-            setSelectedShop(null);
-            setAdjData({ amount: '', description: '', method: 'Cash' });
-            if (onSuccess) onSuccess();
         } catch (err: any) {
             Alert.alert('Error', err.message || 'Failed to adjust balance');
         } finally {
@@ -57,9 +67,6 @@ export const useShopActions = (onSuccess?: () => void, collectionDate?: string) 
         if (!selectedShop || submittingPayment) return;
         
         let amount = parseFloat(paymentData.amount);
-        if (paymentData.method === 'Dual Mode') {
-            amount = (parseFloat(paymentData.dualCashAmount) || 0) + (parseFloat(paymentData.dualUpiAmount) || 0);
-        }
 
         if (isNaN(amount) || amount <= 0) {
             return Alert.alert('Error', 'Please enter a valid amount');
@@ -71,49 +78,50 @@ export const useShopActions = (onSuccess?: () => void, collectionDate?: string) 
         }
 
         setSubmittingPayment(true);
+
+        // Close modal and reset fields instantly
+        setShowPaymentModal(false);
+        const prevShop = selectedShop;
+        setSelectedShop(null);
+        const method = paymentData.method === 'UPI' ? paymentData.upiApp : paymentData.method;
+        const description = paymentData.description;
+        setPaymentData({ amount: '', method: 'Cash', upiApp: 'PhonePe', description: '' });
+
         try {
             const userData = await getUserData();
             const userName = userData?.first_name ? `${userData.first_name} ${userData.last_name || ''}`.trim() : 'Admin';
             
-            let method = paymentData.method;
-            let description = paymentData.description;
+            let finalMethod = method;
+            let finalDescription = description;
             
-            if (paymentData.method === 'UPI') {
-                method = paymentData.upiApp;
-            } else if (paymentData.method === 'Dual Mode') {
-                const cashAmt = parseFloat(paymentData.dualCashAmount) || 0;
-                const upiAmt = parseFloat(paymentData.dualUpiAmount) || 0;
-                method = `Cash + ${paymentData.upiApp}`;
-                if (!description) {
-                    description = `Split Payment: Cash (₹${cashAmt}) + ${paymentData.upiApp} (₹${upiAmt})`;
+            if (method === 'Discount') {
+                if (!finalDescription) {
+                    finalDescription = `Discount Applied — ₹${amount.toLocaleString('en-IN')}`;
                 }
-            } else if (paymentData.method === 'Discount') {
-                method = 'Discount';
-                if (!description) {
-                    description = `Discount Applied — ₹${amount.toLocaleString('en-IN')}`;
-                }
+            } else if (!finalDescription) {
+                finalDescription = `${method} payment collected by ${userName}`;
             }
 
-            const cash_amount = paymentData.method === 'Dual Mode' ? parseFloat(paymentData.dualCashAmount) || 0 : (paymentData.method === 'Cash' ? amount : 0);
-            const upi_amount = paymentData.method === 'Dual Mode' ? parseFloat(paymentData.dualUpiAmount) || 0 : (paymentData.method === 'UPI' ? amount : 0);
-            const cheque_amount = paymentData.method === 'Cheque' ? amount : 0;
+            if (collectPaymentOptimistic) {
+                await collectPaymentOptimistic(prevShop.shop_id, amount, finalMethod, finalDescription, userName);
+            } else {
+                const cash_amount = finalMethod === 'Cash' ? amount : 0;
+                const upi_amount = ['UPI', 'PhonePe', 'GPay', 'Paytm', 'Other UPI'].includes(finalMethod) ? amount : 0;
+                const cheque_amount = finalMethod === 'Cheque' ? amount : 0;
 
-            await apiCollectPayment(selectedShop.shop_id, {
-                amount: amount,
-                payment_method: method,
-                cash_amount,
-                upi_amount,
-                cheque_amount,
-                description: description || `${method} payment collected by ${userName}`,
-                created_by: userName,
-                collection_date: collectionDate
-            });
-            
+                await apiCollectPayment(prevShop.shop_id, {
+                    amount: amount,
+                    payment_method: finalMethod,
+                    cash_amount,
+                    upi_amount,
+                    cheque_amount,
+                    description: finalDescription,
+                    created_by: userName,
+                    collection_date: collectionDate
+                });
+                if (onSuccess) onSuccess();
+            }
             Alert.alert('Success', 'Payment recorded!');
-            setShowPaymentModal(false);
-            setSelectedShop(null);
-            setPaymentData({ amount: '', dualCashAmount: '', dualUpiAmount: '', method: 'Cash', upiApp: 'PhonePe', description: '' });
-            if (onSuccess) onSuccess();
         } catch (err: any) {
             Alert.alert('Error', err.message || 'Failed to record payment');
         } finally {

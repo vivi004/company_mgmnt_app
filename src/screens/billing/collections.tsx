@@ -263,7 +263,7 @@ export default function CollectionsScreen() {
                     <View className="flex-row items-center justify-between mb-3">
                       <View className="flex-1 mr-2">
                         <Text className="font-black text-slate-800 text-base">{idx + 1}. {row.shop_name}</Text>
-                        <Text className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-1">{row.owner_name || 'No Area Name'}</Text>
+                        <Text className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-1">{row.owner_name || 'No Owner Name'}</Text>
                       </View>
                       <View className="flex-row gap-1">
                         {row.cash_collected > 0 && (

@@ -72,13 +72,27 @@ function ReviewItemRow({ item, index, cart, updateQuantity, setAbsoluteQuantity 
     const displayRate = isConvertibleLtr ? item.price * ltrMultiplier : item.price;
     const cartDelta = isConvertibleLtr ? (1 / ltrMultiplier) : (item.id.includes('_ltr') ? 0.5 : 1);
 
+    let description = `${item.name} ${item.size}`;
+    if (item.id === 'vs-gn-500ml-box' || item.id === 'vs-gn-1l-box') {
+        description = `${item.name} ${item.size.replace(/\s*box$/i, '')}`;
+    }
+
+    // Renames Box and LTR sizes to shorthand for Review Order view
+    description = description.replace(/1 BOX \(50x100ml\)/i, '100ml BOX');
+    description = description.replace(/1 BOX \(25x200ml\)/i, '200ml BOX');
+    description = description.replace(/1 BOX \(20x500ml\)/i, '500ml BOX');
+    description = description.replace(/1 BOX \(10x1L\)/i, '1Ltr BOX');
+    description = description.replace(/1 BOX \(5x2L\)/i, '2Ltr BOX');
+    description = description.replace(/1 LTR \(10x100ml\)/i, '100ml');
+    description = description.replace(/1 LTR \(5x200ml\)/i, '200ml');
+
     return (
         <View className="px-6 py-5 border-b border-slate-50">
             <View className="flex-row items-center">
                 <Text className="w-10 font-black text-slate-400">{index + 1}</Text>
                 <View className="flex-1">
                     <Text className="font-black text-base text-slate-900" numberOfLines={1}>
-                        {item.id === 'vs-gn-500ml-box' || item.id === 'vs-gn-1l-box' ? `${item.name} ${item.size.replace(/\s*box$/i, '')}` : `${item.name} ${item.size}`}
+                        {description}
                     </Text>
                     <Text className="text-xs font-bold text-slate-500 mt-0.5">{item.brand}</Text>
                 </View>

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   View, Text, TouchableOpacity, FlatList,
   TextInput, ActivityIndicator, Alert, Modal,
-  ScrollView, Image, BackHandler
+  ScrollView, Image, BackHandler, KeyboardAvoidingView, Platform, Keyboard
 } from 'react-native';
 import { DrawerActions } from '@react-navigation/native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -18,6 +18,30 @@ export default function ShopListScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { orderLineId, villageName, areaName } = useLocalSearchParams<{ orderLineId: string; villageName: string; areaName: string }>();
+
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showListener = Keyboard.addListener(
+      Platform.OS === 'android' ? 'keyboardDidShow' : 'keyboardWillShow',
+      (e) => {
+        if (Platform.OS === 'android') {
+          setKeyboardHeight(e.endCoordinates.height);
+        }
+      }
+    );
+    const hideListener = Keyboard.addListener(
+      Platform.OS === 'android' ? 'keyboardDidHide' : 'keyboardWillHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      showListener.remove();
+      hideListener.remove();
+    };
+  }, []);
 
   const [shops, setShops] = useState<Shop[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,12 +101,12 @@ export default function ShopListScreen() {
   const flatListRef = useRef<FlatList>(null);
 
   // Define loadShops FIRST (as useCallback so it's stable and can be used in hooks below)
-  const loadShops = useCallback(async () => {
+  const loadShops = useCallback(async (silent = false) => {
     if (!orderLineId) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const data = await fetchShopsByVillage(Number(orderLineId));
       // Normalize MySQL 0/1 integers to real booleans
@@ -94,7 +118,7 @@ export default function ShopListScreen() {
     } catch {
       Alert.alert('Error', 'Failed to load shops. Please try again.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [orderLineId]);
 
@@ -163,26 +187,55 @@ export default function ShopListScreen() {
       Alert.alert('Error', 'Shop name is required.');
       return;
     }
+
+    const originalShops = [...shops];
     setSubmitting(true);
+
+    // Close modal and reset form immediately
+    setShowModal(false);
+    
     try {
       const user = await getUserData();
       const userName = user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : (user?.username || 'Staff');
       
-      await createShop({
+      const tempId = -Date.now();
+      const newShopOpt: Shop = {
+        id: tempId,
         order_line_id: Number(orderLineId),
-        village_name: villageName,
-        shop_name: formData.shop_name,
-        owner_name: formData.owner_name,
-        shop_owner: formData.shop_owner,
-        phone: formData.phone,
-        phone2: formData.phone2,
+        village_name: villageName || '',
+        area_name: areaName || villageName || '',
+        shop_name: formData.shop_name.trim(),
+        owner_name: formData.owner_name.trim(),
+        shop_owner: formData.shop_owner.trim(),
+        phone: formData.phone.trim(),
+        phone2: formData.phone2.trim(),
         balance: parseFloat(formData.balance) || 0,
+        has_order_today: false,
+      };
+
+      // Optimistically update list and clear input fields immediately
+      setShops(prev => [...prev, newShopOpt]);
+      setFormData({ shop_name: '', owner_name: '', shop_owner: '', phone: '', phone2: '', balance: '' });
+
+      // Background API submission
+      await createShop({
+        order_line_id: newShopOpt.order_line_id,
+        village_name: newShopOpt.village_name,
+        area_name: newShopOpt.area_name,
+        shop_name: newShopOpt.shop_name,
+        owner_name: newShopOpt.owner_name,
+        shop_owner: newShopOpt.shop_owner,
+        phone: newShopOpt.phone,
+        phone2: newShopOpt.phone2,
+        balance: newShopOpt.balance,
         created_by: userName,
       });
-      setShowModal(false);
-      setFormData({ shop_name: '', owner_name: '', shop_owner: '', phone: '', phone2: '', balance: '' });
-      loadShops();
-    } catch {
+
+      // Silent reload to sync local state with actual DB shop object (and proper DB id)
+      await loadShops(true);
+    } catch (error) {
+      // Revert state on failure
+      setShops(originalShops);
       Alert.alert('Error', 'Failed to add shop. Please try again.');
     } finally {
       setSubmitting(false);
@@ -702,9 +755,15 @@ export default function ShopListScreen() {
       </Modal>
 
       {/* Adjust Balance Modal */}
-      <Modal visible={showAdjustModal} animationType="slide" transparent>
-        <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.8)', justifyContent: 'center', padding: 24 }}>
-          <View style={{ backgroundColor: '#FFFFFF', borderRadius: 40, padding: 32 }}>
+      <Modal visible={showAdjustModal} animationType="slide" transparent statusBarTranslucent={true}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          className="flex-1 justify-end bg-slate-950/80"
+        >
+          <View 
+            className="bg-white rounded-t-[40px] p-8"
+            style={{ paddingBottom: Platform.OS === 'android' ? Math.max(keyboardHeight, 32) : 32 }}
+          >
             <View className="flex-row items-center justify-between mb-8">
               <View>
                 <Text className="text-2xl font-black italic tracking-tight text-slate-900">Manual Adjustment</Text>
@@ -746,7 +805,7 @@ export default function ShopListScreen() {
                 {adjusting ? <ActivityIndicator color="white" /> : <Text className="text-white font-black uppercase tracking-widest text-sm">Apply Adjustment</Text>}
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Sort Modal */}
@@ -796,9 +855,15 @@ export default function ShopListScreen() {
       </Modal>
 
       {/* Payment Collection Modal */}
-      <Modal visible={showPaymentModal} animationType="slide" transparent presentationStyle="overFullScreen">
-          <View className="flex-1 justify-end bg-slate-950/80">
-              <View className="bg-white rounded-t-[40px] p-8">
+      <Modal visible={showPaymentModal} animationType="slide" transparent presentationStyle="overFullScreen" statusBarTranslucent={true}>
+          <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+              className="flex-1 justify-end bg-slate-950/80"
+          >
+              <View 
+                  className="bg-white rounded-t-[40px] p-8"
+                  style={{ paddingBottom: Platform.OS === 'android' ? Math.max(keyboardHeight, 32) : 32 }}
+              >
                   <View className="flex-row items-center justify-between mb-6">
                       <View>
                           <Text className="text-2xl font-black italic tracking-tight text-slate-900">Collect Payment</Text>
@@ -905,19 +970,25 @@ export default function ShopListScreen() {
                   <TouchableOpacity
                       onPress={handleCollectPayment}
                       disabled={collecting}
-                      className="bg-emerald-600 py-5 rounded-3xl items-center mb-10 shadow-xl shadow-emerald-600/40"
+                      className="bg-emerald-600 py-5 rounded-3xl items-center mb-4 shadow-xl shadow-emerald-600/40"
                       style={collecting ? { opacity: 0.7 } : {}}
                   >
                       {collecting ? <ActivityIndicator color="white" /> : <Text className="text-white font-black uppercase tracking-widest text-sm">Confirm Collection</Text>}
                   </TouchableOpacity>
               </View>
-          </View>
+          </KeyboardAvoidingView>
       </Modal>
 
       {/* Add Shop Modal */}
-      <Modal visible={showModal} animationType="slide" transparent presentationStyle="overFullScreen">
-        <View className="flex-1 justify-end bg-slate-950/80">
-          <View className="bg-white rounded-t-[40px] p-8">
+      <Modal visible={showModal} animationType="slide" transparent presentationStyle="overFullScreen" statusBarTranslucent={true}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          className="flex-1 justify-end bg-slate-950/80"
+        >
+          <View 
+            className="bg-white rounded-t-[40px] p-8"
+            style={{ paddingBottom: Platform.OS === 'android' ? Math.max(keyboardHeight, 32) : 32 }}
+          >
             <View className="flex-row items-center justify-between mb-6">
               <View>
                 <Text className="text-2xl font-black italic tracking-tight text-slate-900">Add New Shop</Text>
@@ -960,7 +1031,7 @@ export default function ShopListScreen() {
               </TouchableOpacity>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
       </View>
     </SafeAreaView>

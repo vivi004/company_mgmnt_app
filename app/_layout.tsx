@@ -18,7 +18,10 @@ configureReanimatedLogger({
   strict: false,
 });
 
-LogBox.ignoreLogs(['ExpoKeepAwake.activate']);
+LogBox.ignoreLogs([
+  'ExpoKeepAwake.activate',
+  'InteractionManager has been deprecated'
+]);
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
