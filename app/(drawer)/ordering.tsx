@@ -607,6 +607,7 @@ const ProductCard = memo(({ product, cart, customPrices, updateQuantity, setAbso
     </View>
   );
 });
+ProductCard.displayName = 'ProductCard';
 
 const BoxLitreControls = memo(({ product, cart, customPrices, updateQuantity, setAbsoluteQuantity, handlePriceChange, boxMult, ltrMult, ltrLabel, ltrStep }: {
   product: Product;
@@ -711,6 +712,7 @@ const BoxLitreControls = memo(({ product, cart, customPrices, updateQuantity, se
     </View>
   );
 });
+BoxLitreControls.displayName = 'BoxLitreControls';
 
 
 

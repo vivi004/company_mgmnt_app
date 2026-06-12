@@ -955,7 +955,7 @@ const TodayCollectionScreen = () => {
                                                         Reason for Decline:
                                                     </Text>
                                                     <Text className="text-red-700 text-xs font-semibold">
-                                                        "{item.rejected_reason}"
+                                                        &quot;{item.rejected_reason}&quot;
                                                     </Text>
                                                 </View>
                                             )}
