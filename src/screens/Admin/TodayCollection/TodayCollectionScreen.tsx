@@ -7,6 +7,10 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
+import { generateCollectionReportHTML, generateCollectionReportCSV } from '../../../utils/collectionReportGenerator';
 
 
 import { useCollections } from './useCollections';
@@ -133,6 +137,7 @@ const TodayCollectionScreen = () => {
     const [refreshing, setRefreshing] = useState(false);
     const [shopSearch, setShopSearch] = useState('');
     const [filterType, setFilterType] = useState<'All' | 'Pending' | 'Completed'>('All');
+    const [showDownloadModal, setShowDownloadModal] = useState(false);
 
     // Ledger Modal States
     const [showLedgerModal, setShowLedgerModal] = useState(false);
@@ -349,6 +354,90 @@ const TodayCollectionScreen = () => {
         setRefreshing(false);
     }, [refresh]);
 
+    // Computed filtered collections based on search query and filter pills
+    const filteredCollections = collections.filter(r => {
+        const isMatch = !shopSearch ||
+            (r.shop_name || '').toLowerCase().includes(shopSearch.toLowerCase()) ||
+            (r.village_name || '').toLowerCase().includes(shopSearch.toLowerCase());
+        if (!isMatch) return false;
+
+        const collected = r.cash_collected + r.upi_collected + r.cheque_collected + (r.discount_payment || 0);
+        if (filterType === 'Pending') return collected === 0;
+        if (filterType === 'Completed') return collected > 0;
+        return true;
+    });
+
+    // Summing totals specifically for the filtered set to display and export
+    const filteredTotals = filteredCollections.reduce((acc, row) => {
+        const collected = row.cash_collected + row.upi_collected + row.cheque_collected + (row.discount_payment || 0);
+        acc.totalOldBalance += row.old_balance;
+        acc.todaysBillAmount += row.todays_bill_amount;
+        acc.amountCollected += collected;
+        acc.totalManualAdjust += (row.manual_adjustments + (row.discount_payment || 0));
+        acc.totalReturnAmount += row.return_amount;
+        acc.totalFutureBills += row.future_bills;
+        acc.totalBalance += row.total_balance;
+        acc.todaysBillBalance += row.todays_bill_amount > 0 ? Math.max(0, row.todays_bill_amount - collected) : 0;
+        return acc;
+    }, {
+        totalOldBalance: 0,
+        todaysBillAmount: 0,
+        amountCollected: 0,
+        totalManualAdjust: 0,
+        totalReturnAmount: 0,
+        totalFutureBills: 0,
+        totalBalance: 0,
+        todaysBillBalance: 0
+    });
+
+    const handleDownloadPDF = async () => {
+        try {
+            const activeOl = orderLines.find(ol => ol.id === selectedOlId);
+            const routeName = activeOl ? activeOl.name.toUpperCase() : 'UNKNOWN ROUTE';
+            
+            const html = generateCollectionReportHTML(
+                filteredCollections,
+                filteredTotals,
+                modeBreakdown,
+                expenses,
+                routeName,
+                selectedDate
+            );
+            
+            const { uri } = await Print.printToFileAsync({ html });
+            await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+        } catch (error) {
+            Alert.alert('Error', 'Failed to generate PDF report');
+            console.error(error);
+        }
+    };
+
+    const handleExportCSV = async () => {
+        try {
+            const activeOl = orderLines.find(ol => ol.id === selectedOlId);
+            const routeName = activeOl ? activeOl.name.toUpperCase() : 'UNKNOWN ROUTE';
+            
+            const csvContent = generateCollectionReportCSV(
+                filteredCollections,
+                filteredTotals,
+                modeBreakdown,
+                expenses,
+                routeName,
+                selectedDate
+            );
+            
+            const filename = `collection_report_${routeName.toLowerCase()}_${selectedDate}.csv`;
+            const fileUri = `${FileSystem.documentDirectory || ''}${filename}`;
+            
+            await FileSystem.writeAsStringAsync(fileUri, csvContent);
+            
+            await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Export Excel / CSV' });
+        } catch (error) {
+            Alert.alert('Error', 'Failed to export CSV file');
+            console.error(error);
+        }
+    };
+
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc' }} edges={['top']}>
             {/* ====== TOP PANEL — 25% compact controls ====== */}
@@ -364,13 +453,23 @@ const TodayCollectionScreen = () => {
 
                     <Text className="text-base font-black tracking-tighter text-slate-900 italic">📊 Collections</Text>
 
-                    <TouchableOpacity
-                        onPress={() => refresh()}
-                        disabled={loading}
-                        className="w-9 h-9 items-center justify-center bg-slate-50 rounded-xl border border-slate-100"
-                    >
-                        <Ionicons name="refresh" size={18} color={loading ? '#3b82f6' : '#64748b'} />
-                    </TouchableOpacity>
+                    <View className="flex-row items-center gap-2">
+                        <TouchableOpacity
+                            onPress={() => setShowDownloadModal(true)}
+                            disabled={loading}
+                            className="w-9 h-9 items-center justify-center bg-slate-50 rounded-xl border border-slate-100"
+                        >
+                            <Feather name="download" size={18} color={loading ? '#94a3b8' : '#3b82f6'} />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            onPress={() => refresh()}
+                            disabled={loading}
+                            className="w-9 h-9 items-center justify-center bg-slate-50 rounded-xl border border-slate-100"
+                        >
+                            <Ionicons name="refresh" size={18} color={loading ? '#3b82f6' : '#64748b'} />
+                        </TouchableOpacity>
+                    </View>
                 </View>
 
                 {/* Date Navigator */}
@@ -520,17 +619,7 @@ const TodayCollectionScreen = () => {
                         </TouchableOpacity>
                     </View>
                     <Text className="text-[9px] font-bold text-slate-400">
-                        {collections.filter(r => {
-                            const isMatch = !shopSearch ||
-                                r.shop_name.toLowerCase().includes(shopSearch.toLowerCase()) ||
-                                r.village_name.toLowerCase().includes(shopSearch.toLowerCase());
-                            if (!isMatch) return false;
-
-                            const collected = r.cash_collected + r.upi_collected + r.cheque_collected + (r.discount_payment || 0);
-                            if (filterType === 'Pending') return collected === 0;
-                            if (filterType === 'Completed') return collected > 0;
-                            return true;
-                        }).length} Shops
+                        {filteredCollections.length} Shops
                     </Text>
                 </View>
 
@@ -551,19 +640,7 @@ const TodayCollectionScreen = () => {
                         <Text className="text-slate-600 font-bold">No collections recorded</Text>
                     </View>
                 ) : (
-                    collections
-                        .filter(r => {
-                            const isMatch = !shopSearch ||
-                                r.shop_name.toLowerCase().includes(shopSearch.toLowerCase()) ||
-                                r.village_name.toLowerCase().includes(shopSearch.toLowerCase());
-                            if (!isMatch) return false;
-
-                            const collected = r.cash_collected + r.upi_collected + r.cheque_collected + (r.discount_payment || 0);
-                            if (filterType === 'Pending') return collected === 0;
-                            if (filterType === 'Completed') return collected > 0;
-                            return true;
-                        })
-                        .map((row, idx) => {
+                    filteredCollections.map((row, idx) => {
                         const collected = row.cash_collected + row.upi_collected + row.cheque_collected + (row.discount_payment || 0);
                         return (
                             <View key={idx} className="bg-white border border-slate-100 rounded-3xl p-4 mb-4 shadow-sm">
@@ -1048,6 +1125,48 @@ const TodayCollectionScreen = () => {
                                 </View>
                             </View>
                         )}
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Download Options Modal */}
+            <Modal 
+                visible={showDownloadModal} 
+                animationType="fade" 
+                transparent
+                statusBarTranslucent={true}
+                onRequestClose={() => setShowDownloadModal(false)}
+            >
+                <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+                    <View className="bg-white rounded-[32px] p-6 w-full max-w-sm border border-slate-100 shadow-2xl">
+                        <View className="flex-row items-center justify-between mb-6">
+                            <Text className="text-lg font-black text-slate-900 tracking-tight">Download Data</Text>
+                            <TouchableOpacity onPress={() => setShowDownloadModal(false)} className="w-8 h-8 items-center justify-center bg-slate-50 rounded-full">
+                                <Feather name="x" size={16} color="#64748b" />
+                            </TouchableOpacity>
+                        </View>
+                        
+                        <TouchableOpacity 
+                            onPress={() => { setShowDownloadModal(false); handleDownloadPDF(); }}
+                            className="bg-slate-50 border border-slate-100 rounded-2xl p-4 flex-row items-center mb-3 active:bg-slate-100"
+                        >
+                            <Text className="text-2xl mr-3">📄</Text>
+                            <View className="flex-1">
+                                <Text className="font-black text-slate-800 text-sm">Download PDF Report</Text>
+                                <Text className="text-[10px] font-bold text-slate-400 uppercase tracking-tight mt-0.5">Printable A4 Landscape Summary</Text>
+                            </View>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity 
+                            onPress={() => { setShowDownloadModal(false); handleExportCSV(); }}
+                            className="bg-slate-50 border border-slate-100 rounded-2xl p-4 flex-row items-center active:bg-slate-100"
+                        >
+                            <Text className="text-2xl mr-3">📊</Text>
+                            <View className="flex-1">
+                                <Text className="font-black text-slate-800 text-sm">Export Excel / CSV</Text>
+                                <Text className="text-[10px] font-bold text-slate-400 uppercase tracking-tight mt-0.5">Spreadsheet Data Export</Text>
+                            </View>
+                        </TouchableOpacity>
                     </View>
                 </View>
             </Modal>
