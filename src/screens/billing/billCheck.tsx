@@ -402,6 +402,7 @@ export default function BillCheckScreen() {
                             phone: bill.phone || '',
                             phone2: bill.phone2 || '',
                             editBillId: bill.id.toString(),
+                            oldBalance: (bill.old_balance ?? 0).toString(),
                           }
                         } as any);
                       }}

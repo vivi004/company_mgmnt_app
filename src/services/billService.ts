@@ -23,6 +23,8 @@ export interface Bill {
   order_line_id?: number;
   shop_id?: number;
   is_edited_price?: boolean;
+  old_balance?: number;
+  oldBalance?: number;
 }
 
 export const submitBill = async (billData: Partial<Bill>): Promise<Bill> => {

@@ -82,6 +82,8 @@ export interface InvoiceData {
     upiName1?: string;
     upiId2?: string;
     upiName2?: string;
+    oldBalance?: number;
+    old_balance?: number;
 }
 
 export const generateInvoiceHTML = (data: InvoiceData, vehicleNo: string = '') => {
@@ -111,6 +113,11 @@ export const generateInvoiceHTML = (data: InvoiceData, vehicleNo: string = '') =
     });
     const totalQty = items.reduce((a, i) => a + i.quantity, 0);
     const totalAmt = items.reduce((a, i) => a + i.price * i.quantity, 0);
+    const oldBalVal = Number(data.oldBalance ?? data.old_balance ?? 0);
+    const totalAmountVal = oldBalVal + totalAmt;
+    const formattedOldBal = oldBalVal.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+    const formattedTodayBill = totalAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+    const formattedTotalAmount = totalAmountVal.toLocaleString('en-IN', { minimumFractionDigits: 2 });
     const ds = formatIST(data.date, { hour: undefined, minute: undefined, second: undefined, hour12: false });
     const dd = data.deliveryDate || data.date;
     const dds = formatIST(dd, { hour: undefined, minute: undefined, second: undefined, hour12: false });
@@ -278,14 +285,40 @@ ${itemRows}
 <div style="text-align:center;font-size:9px;margin-top:6px;line-height:1.8;">
     <b>SUBJECT TO SALEM JURISDICTION</b><br>
     This is a Computer Generated Invoice
-    <div style="display: flex; justify-content: center; gap: 250px; margin-top: 8px;">
-        <div style="text-align: center;">
-            <img src="${generateQRCodeDataURL(upiLink1)}" width="85" height="85" style="display: block; margin: 0 auto 3px;" alt="Scan to Pay 1" />
-            <div style="font-size: 8px; font-weight: bold; line-height: 1.2; color: #333;">GPay/PhonePe/Paytm<br>${upiId1}</div>
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 8px; text-align: left;">
+        <div style="display: flex; justify-content: flex-start; gap: 250px;">
+            <div style="width: 85px; text-align: center;">
+                <img src="${generateQRCodeDataURL(upiLink1)}" width="85" height="85" style="display: block; margin: 0 auto 3px;" alt="Scan to Pay 1" />
+                <div style="font-size: 8px; font-weight: bold; line-height: 1.2; color: #333;">GPay/PhonePe/Paytm<br>${upiId1}</div>
+            </div>
+            <div style="width: 85px; text-align: center;">
+                <img src="${generateQRCodeDataURL(upiLink2)}" width="85" height="85" style="display: block; margin: 0 auto 3px;" alt="Scan to Pay 2" />
+                <div style="font-size: 8px; font-weight: bold; line-height: 1.2; color: #333;">Scan & Pay<br>${upiId2}</div>
+            </div>
         </div>
-        <div style="text-align: center;">
-            <img src="${generateQRCodeDataURL(upiLink2)}" width="85" height="85" style="display: block; margin: 0 auto 3px;" alt="Scan to Pay 2" />
-            <div style="font-size: 8px; font-weight: bold; line-height: 1.2; color: #333;">Scan & Pay<br>${upiId2}</div>
+        <div style="font-size: 11px; line-height: 1.6; color: #000; font-family: Arial, sans-serif; font-weight: bold;">
+            <table style="border-collapse: collapse; text-align: right; width: 220px; font-size: 11px; font-weight: bold; line-height: 1.5; color: #000; font-family: Arial, sans-serif;">
+                <tr>
+                    <td style="text-align: left; padding: 2px 5px 2px 0;">Prev Bal</td>
+                    <td style="padding: 2px 0 2px 5px;">: &#8377; ${formattedOldBal}</td>
+                </tr>
+                <tr>
+                    <td style="text-align: left; padding: 2px 5px 2px 0;">Today Bill</td>
+                    <td style="padding: 2px 0 2px 5px;">: &#8377; ${formattedTodayBill}</td>
+                </tr>
+                <tr style="border-top: 1px solid #000;">
+                    <td style="text-align: left; padding: 4px 5px 2px 0;">Total Amount</td>
+                    <td style="padding: 4px 0 2px 5px;">: &#8377; ${formattedTotalAmount}</td>
+                </tr>
+                <tr>
+                    <td style="text-align: left; padding: 4px 5px 2px 0;">Collected</td>
+                    <td style="border-bottom: 1.5px dotted #000; width: 100px; padding: 4px 0 2px 5px;">: &#8377; </td>
+                </tr>
+                <tr>
+                    <td style="text-align: left; padding: 6px 5px 2px 0;">Remaining Bal</td>
+                    <td style="border-bottom: 1.5px solid #000; padding: 6px 0 2px 5px;">: &#8377; </td>
+                </tr>
+            </table>
         </div>
     </div>
 </div>

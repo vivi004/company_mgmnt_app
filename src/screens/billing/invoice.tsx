@@ -20,6 +20,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { EncodingType } from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { generateInvoiceHTML } from '../../utils/invoiceUtils';
+import { fetchCollectionsByOrderLine } from '../../services/collectionService';
 
 const BILL_CONTAINER_WIDTH = 1000;
 const BILL_CONTAINER_HEIGHT = 1600; // Large height to avoid WebView internal scrolling issues
@@ -42,6 +43,7 @@ export default function InvoiceScreen() {
     phone2: string;
     specificArea?: string;
     editBillId: string;
+    oldBalance?: string;
   }>();
 
   const [upiSettings, setUpiSettings] = useState({
@@ -72,6 +74,29 @@ export default function InvoiceScreen() {
     loadUpiSettings();
   }, []);
 
+  const [oldBalance, setOldBalance] = useState<number>(() => Number(params.oldBalance || 0));
+
+  useEffect(() => {
+    if (params.oldBalance !== undefined) {
+      setOldBalance(Number(params.oldBalance));
+      return;
+    }
+    const loadBalanceInfo = async () => {
+      if (!params.shopId || !params.orderLineId || !params.deliveryDate) return;
+      try {
+        const datePart = params.deliveryDate.split('T')[0];
+        const { collections } = await fetchCollectionsByOrderLine(Number(params.orderLineId), datePart);
+        const shopColl = collections.find(c => c.shop_id === Number(params.shopId));
+        if (shopColl) {
+          setOldBalance(shopColl.old_balance);
+        }
+      } catch (err) {
+        console.error('Failed to load balance info for invoice', err);
+      }
+    };
+    loadBalanceInfo();
+  }, [params.shopId, params.orderLineId, params.deliveryDate, params.oldBalance]);
+
   const invoiceData = useMemo(() => ({
     shopName: params.shopName || 'Unknown Shop',
     villageName: params.villageName || 'Unknown village',
@@ -84,8 +109,9 @@ export default function InvoiceScreen() {
     deliveryDate: params.deliveryDate || params.date || new Date().toISOString(),
     phone: params.phone || '',
     phone2: params.phone2 || '',
+    oldBalance,
     ...upiSettings
-  }), [params, upiSettings]);
+  }), [params, upiSettings, oldBalance]);
 
   const htmlContent = useMemo(() => generateInvoiceHTML(invoiceData), [invoiceData]);
   const webViewRef = useRef<WebView>(null);
