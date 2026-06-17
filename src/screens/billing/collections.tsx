@@ -128,6 +128,14 @@ export default function CollectionsScreen() {
     };
   }, [collections]);
 
+  const sortedCollections = useMemo(() => {
+    return [...collections].sort((a, b) => {
+      const aHasBill = (a.todays_bill_amount || 0) > 0 ? 1 : 0;
+      const bHasBill = (b.todays_bill_amount || 0) > 0 ? 1 : 0;
+      return bHasBill - aHasBill;
+    });
+  }, [collections]);
+
   const changeDate = (days: number) => {
     const currentDate = new Date(selectedDate);
     currentDate.setDate(currentDate.getDate() + days);
@@ -255,11 +263,11 @@ export default function CollectionsScreen() {
                 <Text className="text-xs font-black uppercase tracking-widest text-slate-500">📋 Collection Details</Text>
               </View>
               
-              {collections.map((row, idx) => {
+              {sortedCollections.map((row, idx) => {
                 const collected = row.cash_collected + row.upi_collected + row.cheque_collected;
                 const billBalance = Math.max(0, row.todays_bill_amount - collected);
                 return (
-                  <View key={row.id} className={idx !== collections.length - 1 ? "p-6 border-b border-slate-50" : "p-6"}>
+                  <View key={row.id} className={idx !== sortedCollections.length - 1 ? "p-6 border-b border-slate-50" : "p-6"}>
                     <View className="flex-row items-center justify-between mb-3">
                       <View className="flex-1 mr-2">
                         <Text className="font-black text-slate-800 text-base">{idx + 1}. {row.shop_name}</Text>

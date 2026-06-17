@@ -50,6 +50,18 @@ export const createShop = async (payload: Partial<Shop>): Promise<Shop> => {
   return res.json();
 };
 
+export const updateShop = async (shopId: number, payload: Partial<Shop>): Promise<any> => {
+  const res = await authenticatedFetch(`${API_BASE_URL}/shops/${shopId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(errorData.error || errorData.message || 'Failed to update shop');
+  }
+  return res.json();
+};
+
 export const collectPayment = async (
   shopId: number, 
   payload: {

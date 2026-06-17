@@ -9,9 +9,10 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { fetchShopsByVillage, createShop, collectPayment, fetchShopLedger, adjustBalance, Shop } from '../../services/shopService';
+import { fetchShopsByVillage, createShop, updateShop, collectPayment, fetchShopLedger, adjustBalance, Shop } from '../../services/shopService';
 import { getUserData } from '../../services/authService';
 import { formatIST } from '../../utils/dateUtils';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function ShopListScreen() {
   const navigation = useNavigation();
@@ -49,6 +50,20 @@ export default function ShopListScreen() {
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({ shop_name: '', owner_name: '', shop_owner: '', phone: '', phone2: '', balance: '' });
   const [submitting, setSubmitting] = useState(false);
+  const [editingShop, setEditingShop] = useState<Shop | null>(null);
+  const [userRole, setUserRole] = useState<string>('staff');
+
+  useEffect(() => {
+    const loadUserRole = async () => {
+      try {
+        const role = await AsyncStorage.getItem('userRole');
+        setUserRole(role || 'staff');
+      } catch (e) {
+        console.warn('Failed to load userRole:', e);
+      }
+    };
+    loadUserRole();
+  }, []);
 
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'completed'>('all');
   const [sortBy, setSortBy] = useState<'name' | 'balance' | 'status'>('status');
@@ -198,9 +213,7 @@ export default function ShopListScreen() {
       const user = await getUserData();
       const userName = user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : (user?.username || 'Staff');
       
-      const tempId = -Date.now();
-      const newShopOpt: Shop = {
-        id: tempId,
+      const payload: Partial<Shop> = {
         order_line_id: Number(orderLineId),
         village_name: villageName || '',
         area_name: areaName || villageName || '',
@@ -210,35 +223,55 @@ export default function ShopListScreen() {
         phone: formData.phone.trim(),
         phone2: formData.phone2.trim(),
         balance: parseFloat(formData.balance) || 0,
-        has_order_today: false,
       };
 
-      // Optimistically update list and clear input fields immediately
-      setShops(prev => [...prev, newShopOpt]);
-      setFormData({ shop_name: '', owner_name: '', shop_owner: '', phone: '', phone2: '', balance: '' });
+      if (editingShop) {
+        // Optimistically update list
+        setShops(prev => prev.map(s => s.id === editingShop.id ? { ...s, ...payload } : s));
+        setFormData({ shop_name: '', owner_name: '', shop_owner: '', phone: '', phone2: '', balance: '' });
 
-      // Background API submission
-      await createShop({
-        order_line_id: newShopOpt.order_line_id,
-        village_name: newShopOpt.village_name,
-        area_name: newShopOpt.area_name,
-        shop_name: newShopOpt.shop_name,
-        owner_name: newShopOpt.owner_name,
-        shop_owner: newShopOpt.shop_owner,
-        phone: newShopOpt.phone,
-        phone2: newShopOpt.phone2,
-        balance: newShopOpt.balance,
-        created_by: userName,
-      });
+        // Background API submission
+        await updateShop(editingShop.id, payload);
+        
+        // Reset editing state
+        setEditingShop(null);
+        Alert.alert('Success', 'Shop updated successfully!');
+      } else {
+        const tempId = -Date.now();
+        const newShopOpt: Shop = {
+          id: tempId,
+          order_line_id: Number(orderLineId),
+          village_name: villageName || '',
+          area_name: areaName || villageName || '',
+          shop_name: formData.shop_name.trim(),
+          owner_name: formData.owner_name.trim(),
+          shop_owner: formData.shop_owner.trim(),
+          phone: formData.phone.trim(),
+          phone2: formData.phone2.trim(),
+          balance: parseFloat(formData.balance) || 0,
+          has_order_today: false,
+        };
+
+        // Optimistically update list and clear input fields immediately
+        setShops(prev => [...prev, newShopOpt]);
+        setFormData({ shop_name: '', owner_name: '', shop_owner: '', phone: '', phone2: '', balance: '' });
+
+        // Background API submission
+        await createShop({
+          ...payload,
+          created_by: userName,
+        });
+      }
 
       // Silent reload to sync local state with actual DB shop object (and proper DB id)
       await loadShops(true);
     } catch (error) {
       // Revert state on failure
       setShops(originalShops);
-      Alert.alert('Error', 'Failed to add shop. Please try again.');
+      Alert.alert('Error', editingShop ? 'Failed to update shop. Please try again.' : 'Failed to add shop. Please try again.');
     } finally {
       setSubmitting(false);
+      setEditingShop(null);
     }
   };
 
@@ -360,7 +393,7 @@ export default function ShopListScreen() {
         <View style={{ height: '35%', minHeight: 220, justifyContent: 'space-around', paddingVertical: 4 }}>
           {/* Header */}
           <View className="px-5 pt-1 pb-1 flex-row items-center justify-between">
-            <View className="flex-row items-center gap-3">
+            <View className="flex-1 flex-row items-center gap-2 mr-2">
               <TouchableOpacity
                 onPress={() => navigation.dispatch(DrawerActions.toggleDrawer())}
                 className="p-2 border border-slate-200 rounded-xl bg-white shadow-sm"
@@ -373,9 +406,9 @@ export default function ShopListScreen() {
               >
                 <Feather name="arrow-left" size={18} color="#1E293B" />
               </TouchableOpacity>
-              <View className="ml-1 justify-center">
+              <View className="ml-1 justify-center flex-1">
                 <Text className="text-xl font-black text-slate-900 tracking-tighter italic leading-tight">Select Shop</Text>
-                <Text className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                <Text numberOfLines={1} className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
                   Area: <Text className="text-emerald-500 font-black">{villageName}</Text>
                 </Text>
               </View>
@@ -388,7 +421,11 @@ export default function ShopListScreen() {
                  </Text>
               </View>
               <TouchableOpacity
-                  onPress={() => setShowModal(true)}
+                  onPress={() => {
+                      setEditingShop(null);
+                      setFormData({ shop_name: '', owner_name: '', shop_owner: '', phone: '', phone2: '', balance: '' });
+                      setShowModal(true);
+                  }}
                   className="bg-[#10B981] px-3 py-2 rounded-xl shadow-md shadow-emerald-500/20 border-b border-emerald-700"
               >
                   <Text className="text-white font-black text-[9px] uppercase tracking-widest">+ Add</Text>
@@ -564,32 +601,51 @@ export default function ShopListScreen() {
               </TouchableOpacity>
 
               <View className="border-t border-slate-50 pt-4 px-6 pb-6 bg-slate-50/30">
-                  <View className="flex-row items-center justify-between">
-                      <View className="flex-row items-center gap-2">
-                          <TouchableOpacity 
-                            onPress={() => {
-                                setSelectedShop(item);
-                                setShowPaymentModal(true);
-                            }}
-                            className="bg-emerald-100 border border-emerald-200 px-3 py-2 rounded-xl flex-row items-center gap-1.5"
-                          >
-                              <Feather name="plus-circle" size={12} color="#059669" />
-                              <Text className="text-emerald-700 font-black text-[10px] uppercase tracking-widest">Collect</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity 
-                            onPress={() => fetchLedger(item)}
-                            className="bg-indigo-100 border border-indigo-200 px-3 py-2 rounded-xl flex-row items-center gap-1.5"
-                          >
-                              <Feather name="list" size={12} color="#4F46E5" />
-                              <Text className="text-indigo-700 font-black text-[10px] uppercase tracking-widest">Ledger</Text>
-                          </TouchableOpacity>
-                      </View>
-                      <View className="items-end">
-                          <Text className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-0.5">Balance</Text>
-                          <Text className={`text-lg font-black ${item.balance > 0 ? 'text-red-500' : 'text-slate-900'}`}>
-                              ₹{Number(item.balance).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
-                          </Text>
-                      </View>
+                  {/* Balance Display */}
+                  <View className="flex-row items-center justify-between mb-4">
+                      <Text className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Balance</Text>
+                      <Text className={`text-lg font-black ${item.balance > 0 ? 'text-red-500' : 'text-slate-900'}`}>
+                          ₹{Number(item.balance).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
+                      </Text>
+                  </View>
+
+                  {/* Action Buttons */}
+                  <View className="flex-row items-center gap-2">
+                      <TouchableOpacity 
+                        onPress={() => {
+                            setSelectedShop(item);
+                            setShowPaymentModal(true);
+                        }}
+                        className="flex-1 bg-emerald-100 border border-emerald-200 py-2.5 rounded-xl flex-row items-center justify-center gap-1.5"
+                      >
+                          <Feather name="plus-circle" size={12} color="#059669" />
+                          <Text className="text-emerald-700 font-black text-[10px] uppercase tracking-widest">Collect</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        onPress={() => fetchLedger(item)}
+                        className="flex-1 bg-indigo-100 border border-indigo-200 py-2.5 rounded-xl flex-row items-center justify-center gap-1.5"
+                      >
+                          <Feather name="list" size={12} color="#4F46E5" />
+                          <Text className="text-indigo-700 font-black text-[10px] uppercase tracking-widest">Ledger</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        onPress={() => {
+                            setEditingShop(item);
+                            setFormData({
+                                shop_name: item.shop_name,
+                                owner_name: item.owner_name || '',
+                                shop_owner: item.shop_owner || '',
+                                phone: item.phone || '',
+                                phone2: item.phone2 || '',
+                                balance: String(item.balance || 0),
+                            });
+                            setShowModal(true);
+                        }}
+                        className="flex-1 bg-blue-100 border border-blue-200 py-2.5 rounded-xl flex-row items-center justify-center gap-1.5"
+                      >
+                          <Feather name="edit-2" size={12} color="#2563EB" />
+                          <Text className="text-blue-700 font-black text-[10px] uppercase tracking-widest">Edit</Text>
+                      </TouchableOpacity>
                   </View>
               </View>
             </View>
@@ -991,10 +1047,10 @@ export default function ShopListScreen() {
           >
             <View className="flex-row items-center justify-between mb-6">
               <View>
-                <Text className="text-2xl font-black italic tracking-tight text-slate-900">Add New Shop</Text>
+                <Text className="text-2xl font-black italic tracking-tight text-slate-900">{editingShop ? 'Edit Shop' : 'Add New Shop'}</Text>
                 <Text className="text-xs font-black text-slate-500 uppercase tracking-widest mt-1">{villageName}</Text>
               </View>
-              <TouchableOpacity onPress={() => setShowModal(false)}>
+              <TouchableOpacity onPress={() => { setShowModal(false); setEditingShop(null); }}>
                 <Feather name="x" size={24} color="#94A3B8" />
               </TouchableOpacity>
             </View>
@@ -1006,19 +1062,26 @@ export default function ShopListScreen() {
                 { label: 'Phone 1', key: 'phone', placeholder: 'e.g. 9876543210' },
                 { label: 'Phone 2', key: 'phone2', placeholder: 'e.g. 9876543211' },
                 { label: 'Balance (₹)', key: 'balance', placeholder: '0.00' },
-              ].map(({ label, key, placeholder }) => (
-                <View key={key} className="mb-4">
-                  <Text className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-1">{label}</Text>
-                  <TextInput
-                    value={(formData as any)[key]}
-                    onChangeText={(v) => setFormData({ ...formData, [key]: v })}
-                    placeholder={placeholder}
-                    placeholderTextColor="#94A3B8"
-                    keyboardType={key === 'balance' ? 'numeric' : 'default'}
-                    className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-semibold text-slate-900"
-                  />
-                </View>
-              ))}
+              ].map(({ label, key, placeholder }) => {
+                const isBalanceField = key === 'balance';
+                const isEditable = !isBalanceField || !editingShop || userRole === 'admin';
+                return (
+                  <View key={key} className="mb-4">
+                    <Text className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-1">{label}</Text>
+                    <TextInput
+                      value={(formData as any)[key]}
+                      onChangeText={(v) => setFormData({ ...formData, [key]: v })}
+                      placeholder={placeholder}
+                      placeholderTextColor="#94A3B8"
+                      keyboardType={key === 'balance' ? 'numeric' : 'default'}
+                      editable={isEditable}
+                      className={isEditable 
+                        ? "bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-semibold text-slate-900" 
+                        : "bg-slate-100 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-semibold text-slate-400"}
+                    />
+                  </View>
+                );
+              })}
               <TouchableOpacity
                 onPress={handleAddShop}
                 disabled={submitting}
@@ -1027,7 +1090,7 @@ export default function ShopListScreen() {
               >
                 {submitting
                   ? <ActivityIndicator color="white" />
-                  : <Text className="text-white font-black uppercase tracking-widest text-sm">Add Shop</Text>}
+                  : <Text className="text-white font-black uppercase tracking-widest text-sm">{editingShop ? 'Save Changes' : 'Add Shop'}</Text>}
               </TouchableOpacity>
             </ScrollView>
           </View>

@@ -354,18 +354,24 @@ const TodayCollectionScreen = () => {
         setRefreshing(false);
     }, [refresh]);
 
-    // Computed filtered collections based on search query and filter pills
-    const filteredCollections = collections.filter(r => {
-        const isMatch = !shopSearch ||
-            (r.shop_name || '').toLowerCase().includes(shopSearch.toLowerCase()) ||
-            (r.village_name || '').toLowerCase().includes(shopSearch.toLowerCase());
-        if (!isMatch) return false;
+    // Computed filtered collections based on search query and filter pills, sorted by today's bill amount > 0 first
+    const filteredCollections = collections
+        .filter(r => {
+            const isMatch = !shopSearch ||
+                (r.shop_name || '').toLowerCase().includes(shopSearch.toLowerCase()) ||
+                (r.village_name || '').toLowerCase().includes(shopSearch.toLowerCase());
+            if (!isMatch) return false;
 
-        const collected = r.cash_collected + r.upi_collected + r.cheque_collected + (r.discount_payment || 0);
-        if (filterType === 'Pending') return collected === 0;
-        if (filterType === 'Completed') return collected > 0;
-        return true;
-    });
+            const collected = r.cash_collected + r.upi_collected + r.cheque_collected + (r.discount_payment || 0);
+            if (filterType === 'Pending') return collected === 0;
+            if (filterType === 'Completed') return collected > 0;
+            return true;
+        })
+        .sort((a, b) => {
+            const aHasBill = (a.todays_bill_amount || 0) > 0 ? 1 : 0;
+            const bHasBill = (b.todays_bill_amount || 0) > 0 ? 1 : 0;
+            return bHasBill - aHasBill;
+        });
 
     // Summing totals specifically for the filtered set to display and export
     const filteredTotals = filteredCollections.reduce((acc, row) => {
