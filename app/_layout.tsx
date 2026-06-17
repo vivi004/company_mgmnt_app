@@ -27,14 +27,22 @@ export default function RootLayout() {
   const [loaded, error] = useFonts({
     ...Feather.font,
   });
+  const [isDelayOver, setIsDelayOver] = React.useState(false);
 
   useEffect(() => {
-    if (loaded || error) {
+    const timer = setTimeout(() => {
+      setIsDelayOver(true);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if ((loaded || error) && isDelayOver) {
       SplashScreen.hideAsync();
     }
-  }, [loaded, error]);
+  }, [loaded, error, isDelayOver]);
 
-  if (!loaded && !error) {
+  if ((!loaded && !error) || !isDelayOver) {
     return null;
   }
 

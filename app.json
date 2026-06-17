@@ -8,6 +8,11 @@
     "scheme": "nisha",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/dw_img/Logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "ios": {
       "supportsTablet": true
     },
@@ -49,9 +54,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "62d1b4d2-de2d-459b-865c-8692b80bbfb1"
+        "projectId": "7ce43538-a6e0-4790-bc5e-2c5c4c380e10"
       }
     },
-    "owner": "vivin2204"
+    "owner": "vivin2004"
   }
 }
