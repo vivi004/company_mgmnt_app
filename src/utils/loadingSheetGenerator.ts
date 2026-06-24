@@ -63,15 +63,16 @@ export function generateLoadingSheetHTML(bills: Bill[], dateStr: string, vehicle
             if (!aggregated[pid]) aggregated[pid] = { qty: 0, rates: [] };
             aggregated[pid].qty += qty;
             
-            const product = productMap.get(pid);
-            const basePid = pid.replace(/_box$|_ltr$|_box_wl$|_ltr_wl$|_wl$/, '');
-            const isLtr = pid.endsWith('_ltr') || pid.endsWith('_ltr_wl');
-            const isBox = pid.endsWith('_box') || pid.endsWith('_box_wl');
+            const cleanPid = pid.replace(/_wl$/, '').replace(/_box_wl$/, '_box').replace(/_ltr_wl$/, '_ltr');
+            const product = productMap.get(cleanPid);
+            const basePid = cleanPid.replace(/_box$|_ltr$/, '');
+            const isLtr = cleanPid.endsWith('_ltr');
+            const isBox = cleanPid.endsWith('_box');
             const pBase = productMap.get(basePid);
             const baseSize = pBase?.size.toLowerCase() || '';
-
-            let rate = customRates[pid] ?? product?.price ?? 0;
-            if (customRates[pid] === undefined) {
+ 
+            let rate = customRates[pid] ?? customRates[cleanPid] ?? product?.price ?? 0;
+            if (rate === 0) {
                 const baseRate = customRates[basePid];
                 if (baseRate !== undefined) {
                     let multiplier = 1;
@@ -86,22 +87,23 @@ export function generateLoadingSheetHTML(bills: Bill[], dateStr: string, vehicle
             aggregated[pid].rates.push(rate);
         });
     });
-
+ 
     const categoryMap: Record<string, ProductLine[]> = {};
     Object.entries(aggregated).forEach(([pid, data]) => {
-        const product = productMap.get(pid);
+        const cleanPid = pid.replace(/_wl$/, '').replace(/_box_wl$/, '_box').replace(/_ltr_wl$/, '_ltr');
+        const product = productMap.get(cleanPid);
         if (!product) return;
-
-        const category = getCategoryForProductId(pid, allProducts);
+ 
+        const category = getCategoryForProductId(cleanPid, allProducts);
         if (!categoryMap[category]) categoryMap[category] = [];
-
+ 
         const avgRate = data.rates.length > 0 ? data.rates.reduce((a, b) => a + b, 0) / data.rates.length : product.price;
-
+ 
         let description = `${product.name} ${product.size}`.toUpperCase();
-        if (pid === 'vs-gn-500ml-box' || pid === 'vs-gn-1l-box') {
+        if (cleanPid === 'vs-gn-500ml-box' || cleanPid === 'vs-gn-1l-box') {
             description = description.replace(/\s*BOX$/i, '');
         }
-
+ 
         // Renames Box sizes strictly for the Loading Sheet view only
         description = description.replace('1 BOX (50X100ML)', '100ML BOX');
         description = description.replace('1 BOX (25X200ML)', '200ML BOX');
@@ -110,18 +112,23 @@ export function generateLoadingSheetHTML(bills: Bill[], dateStr: string, vehicle
         description = description.replace('1 BOX (5X2L)', '2LTR BOX');
         description = description.replace('1 LTR (10X100ML)', '100ML');
         description = description.replace('1 LTR (5X200ML)', '200ML');
+ 
+        if (pid.endsWith('_wl') || pid.includes('_wl')) {
+            description = `${description} (WL)`;
+        }
+ 
         let displayUnit = (product.unit || 'NOS').toUpperCase();
-
-        if (pid === 'vs-gn-500ml-box' || pid === 'vs-gn-1l-box' || pid.endsWith('-box')) {
+ 
+        if (cleanPid === 'vs-gn-500ml-box' || cleanPid === 'vs-gn-1l-box' || cleanPid.endsWith('-box')) {
             displayUnit = 'BOX';
-        } else if ((pid.endsWith('_ltr') || pid.endsWith('_ltr_wl')) && (pid.includes('100ml') || pid.includes('200ml') || pid.includes('500ml'))) {
+        } else if (cleanPid.endsWith('_ltr') && (cleanPid.includes('100ml') || cleanPid.includes('200ml') || cleanPid.includes('500ml'))) {
             displayUnit = 'LTR';
         } else if (/\b15\s*(LTR|KG|L|T|TIN)\b/i.test(description)) {
             displayUnit = 'TIN';
         } else if (/\b5\s*(LTR|KG|L|CAN)\b/i.test(description)) {
             displayUnit = 'CAN';
         } else if (/\bBOX\b/i.test(description) || description.includes('500ML') || description.includes('500 ML') || description.includes('1LTR') || description.includes('1 LTR')) {
-            if (/\bBOX\b/i.test(description) || pid.includes('_box')) {
+            if (/\bBOX\b/i.test(description) || cleanPid.includes('_box')) {
                 displayUnit = 'BOX';
             } else if (/\b(100|200|500)\s*ML\b/i.test(description)) {
                 displayUnit = 'PCS';
@@ -133,7 +140,7 @@ export function generateLoadingSheetHTML(bills: Bill[], dateStr: string, vehicle
         } else if (displayUnit === 'LITRE') {
             displayUnit = 'PCS';
         }
-
+ 
         categoryMap[category].push({
             name: description,
             mrp: product.price,
