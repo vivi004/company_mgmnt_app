@@ -64,9 +64,9 @@ export function generateLoadingSheetHTML(bills: Bill[], dateStr: string, vehicle
             aggregated[pid].qty += qty;
             
             const product = productMap.get(pid);
-            const basePid = pid.replace(/_box$|_ltr$/, '');
-            const isLtr = pid.endsWith('_ltr');
-            const isBox = pid.endsWith('_box');
+            const basePid = pid.replace(/_box$|_ltr$|_box_wl$|_ltr_wl$|_wl$/, '');
+            const isLtr = pid.endsWith('_ltr') || pid.endsWith('_ltr_wl');
+            const isBox = pid.endsWith('_box') || pid.endsWith('_box_wl');
             const pBase = productMap.get(basePid);
             const baseSize = pBase?.size.toLowerCase() || '';
 
@@ -114,7 +114,7 @@ export function generateLoadingSheetHTML(bills: Bill[], dateStr: string, vehicle
 
         if (pid === 'vs-gn-500ml-box' || pid === 'vs-gn-1l-box' || pid.endsWith('-box')) {
             displayUnit = 'BOX';
-        } else if (pid.endsWith('_ltr') && (pid.includes('100ml') || pid.includes('200ml') || pid.includes('500ml'))) {
+        } else if ((pid.endsWith('_ltr') || pid.endsWith('_ltr_wl')) && (pid.includes('100ml') || pid.includes('200ml') || pid.includes('500ml'))) {
             displayUnit = 'LTR';
         } else if (/\b15\s*(LTR|KG|L|T|TIN)\b/i.test(description)) {
             displayUnit = 'TIN';

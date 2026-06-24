@@ -60,7 +60,7 @@ function ReviewItemRow({ item, index, cart, updateQuantity, setAbsoluteQuantity 
         displayUnit = 'PCS';
     }
 
-    const isLtrVariant = item.id.endsWith('_ltr');
+    const isLtrVariant = item.id.endsWith('_ltr') || item.id.endsWith('_ltr_wl');
     const sizeLower = item.size.toLowerCase();
     const is100ml = sizeLower === '100 ml';
     const is200ml = sizeLower === '200 ml';
@@ -256,8 +256,12 @@ export default function ReviewOrder() {
       
       const allProds = getAllProducts();
       allProds.forEach(p => {
-          if (p.id.endsWith('_box') || p.id.endsWith('_ltr')) return;
-          if (cart[p.id] > 0 || cart[`${p.id}_box`] > 0 || cart[`${p.id}_ltr`] > 0) {
+          if (p.id.endsWith('_box') || p.id.endsWith('_ltr') || p.id.endsWith('_wl') || p.id.endsWith('_box_wl') || p.id.endsWith('_ltr_wl')) return;
+          if (
+              cart[p.id] > 0 || cart[`${p.id}_wl`] > 0 ||
+              cart[`${p.id}_box`] > 0 || cart[`${p.id}_box_wl`] > 0 ||
+              cart[`${p.id}_ltr`] > 0 || cart[`${p.id}_ltr_wl`] > 0
+          ) {
               const basePrice = customPrices[p.id] ?? p.price;
               finalCustomRates[p.id] = basePrice;
               if (customPrices[p.id] !== undefined && customPrices[p.id] !== p.price) {

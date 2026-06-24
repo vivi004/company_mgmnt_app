@@ -33,6 +33,7 @@ export interface Shop {
   has_order_today?: boolean | number;
   last_order_time?: string;
   created_by?: string;
+  without_label_enabled?: boolean | number;
 }
 
 export const fetchShopsByVillage = async (orderLineId: number): Promise<Shop[]> => {

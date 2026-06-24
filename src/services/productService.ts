@@ -167,6 +167,7 @@ export const SHOP_CATEGORIES = [
     { id: 'palm', name: 'Palm Oil', icon: '🌴', subcategories: [{ id: 'ALL', name: 'All Products', icon: '🌴' }], getProducts: () => applyRates(DEFAULT_PALM_OIL_PRODUCTS) },
     { id: 'burfi', name: 'Burfi', icon: '🥜', subcategories: [{ id: 'ALL', name: 'All Products', icon: '🥜' }], getProducts: () => applyRates(DEFAULT_BURFI_PRODUCTS) },
     { id: 'oilcake', name: 'Oil Cake', icon: '🧱', subcategories: [{ id: 'Thool Cake', name: 'Thool Cake', icon: '🧱' }, { id: 'Katti Cake', name: 'Katti Cake', icon: '🪨' }], getProducts: () => applyRates(DEFAULT_OIL_CAKE_PRODUCTS) },
+    { id: 'nisha_wl', name: 'Nisha Oils (Without Label)', icon: '🏷️', subcategories: DEFAULT_NISHA_SUBCATEGORIES, getProducts: () => applyRates(DEFAULT_NISHA_PRODUCTS) },
 ];
 
 export function getAllProducts(): Product[] {
@@ -311,6 +312,11 @@ export function getCartItems(cart: Record<string, number>, customRates?: Record<
             const rate = customRates?.[p.id] ?? p.price;
             items.push({ ...p, price: rate, quantity });
         }
+        if (cart[p.id + '_wl']) {
+            const quantity = cart[p.id + '_wl'] || 0;
+            const rate = customRates?.[p.id] ?? p.price;
+            items.push({ ...p, id: p.id + '_wl', name: `${p.name} (WL)`, price: rate, quantity });
+        }
 
         // 2. Box Variant
         if (cart[p.id + '_box']) {
@@ -328,6 +334,19 @@ export function getCartItems(cart: Record<string, number>, customRates?: Record<
                 quantity: cart[p.id + '_box']
             });
         }
+        if (cart[p.id + '_box_wl']) {
+            const multiplier = is100ml ? 50 : is200ml ? 25 : is500ml ? 20 : is1L ? 10 : is2L ? 5 : 1;
+            const baseRate = customRates?.[p.id] ?? p.price;
+            const rate = baseRate * multiplier;
+            items.push({
+                ...p,
+                id: p.id + '_box_wl',
+                name: `${p.name} (WL)`,
+                size: is100ml ? '1 BOX (50x100ml)' : is200ml ? '1 BOX (25x200ml)' : is500ml ? '1 BOX (20x500ml)' : is1L ? '1 BOX (10x1L)' : is2L ? '1 BOX (5x2L)' : p.size,
+                price: rate,
+                quantity: cart[p.id + '_box_wl']
+            });
+        }
 
         // 3. Litre Variant (suffix _ltr)
         if (cart[p.id + '_ltr']) {
@@ -341,6 +360,23 @@ export function getCartItems(cart: Record<string, number>, customRates?: Record<
                 ...p,
                 id: p.id + '_ltr',
                 name: p.name,
+                // Display the actual size of the piece (e.g., 500 ml instead of 1 LTR pack)
+                size: is100ml ? '100 ml' : is200ml ? '200 ml' : is500ml ? '500 ml' : p.size,
+                price: pieceRate,
+                quantity: quantity
+            });
+        }
+        if (cart[p.id + '_ltr_wl']) {
+            const multiplierLtr = is100ml ? 10 : is200ml ? 5 : is500ml ? 2 : 1;
+            const quantity = (is100ml || is200ml || is500ml) ? (cart[p.id + '_ltr_wl'] || 0) * multiplierLtr : (cart[p.id + '_ltr_wl'] || 0);
+
+            // Use base rate for the price per piece
+            const pieceRate = customRates?.[p.id] ?? p.price;
+
+            items.push({
+                ...p,
+                id: p.id + '_ltr_wl',
+                name: (is100ml || is200ml || is500ml) ? `${p.name} (WL)` : `${p.name} (Litre) (WL)`,
                 // Display the actual size of the piece (e.g., 500 ml instead of 1 LTR pack)
                 size: is100ml ? '100 ml' : is200ml ? '200 ml' : is500ml ? '500 ml' : p.size,
                 price: pieceRate,

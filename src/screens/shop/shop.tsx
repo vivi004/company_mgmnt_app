@@ -48,7 +48,7 @@ export default function ShopListScreen() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
-  const [formData, setFormData] = useState({ shop_name: '', owner_name: '', shop_owner: '', phone: '', phone2: '', balance: '' });
+  const [formData, setFormData] = useState({ shop_name: '', owner_name: '', shop_owner: '', phone: '', phone2: '', balance: '', without_label_enabled: false });
   const [submitting, setSubmitting] = useState(false);
   const [editingShop, setEditingShop] = useState<Shop | null>(null);
   const [userRole, setUserRole] = useState<string>('staff');
@@ -128,6 +128,7 @@ export default function ShopListScreen() {
       const normalized = data.map(s => ({
         ...s,
         has_order_today: s.has_order_today === true || (s.has_order_today as any) === 1,
+        without_label_enabled: s.without_label_enabled === true || (s.without_label_enabled as any) === 1,
       }));
       setShops(normalized);
     } catch {
@@ -223,12 +224,13 @@ export default function ShopListScreen() {
         phone: formData.phone.trim(),
         phone2: formData.phone2.trim(),
         balance: parseFloat(formData.balance) || 0,
+        without_label_enabled: formData.without_label_enabled ? 1 : 0,
       };
 
       if (editingShop) {
         // Optimistically update list
         setShops(prev => prev.map(s => s.id === editingShop.id ? { ...s, ...payload } : s));
-        setFormData({ shop_name: '', owner_name: '', shop_owner: '', phone: '', phone2: '', balance: '' });
+        setFormData({ shop_name: '', owner_name: '', shop_owner: '', phone: '', phone2: '', balance: '', without_label_enabled: false });
 
         // Background API submission
         await updateShop(editingShop.id, payload);
@@ -254,7 +256,7 @@ export default function ShopListScreen() {
 
         // Optimistically update list and clear input fields immediately
         setShops(prev => [...prev, newShopOpt]);
-        setFormData({ shop_name: '', owner_name: '', shop_owner: '', phone: '', phone2: '', balance: '' });
+        setFormData({ shop_name: '', owner_name: '', shop_owner: '', phone: '', phone2: '', balance: '', without_label_enabled: false });
 
         // Background API submission
         await createShop({
@@ -423,7 +425,7 @@ export default function ShopListScreen() {
               <TouchableOpacity
                   onPress={() => {
                       setEditingShop(null);
-                      setFormData({ shop_name: '', owner_name: '', shop_owner: '', phone: '', phone2: '', balance: '' });
+                      setFormData({ shop_name: '', owner_name: '', shop_owner: '', phone: '', phone2: '', balance: '', without_label_enabled: false });
                       setShowModal(true);
                   }}
                   className="bg-[#10B981] px-3 py-2 rounded-xl shadow-md shadow-emerald-500/20 border-b border-emerald-700"
@@ -638,6 +640,7 @@ export default function ShopListScreen() {
                                 phone: item.phone || '',
                                 phone2: item.phone2 || '',
                                 balance: String(item.balance || 0),
+                                without_label_enabled: !!item.without_label_enabled,
                             });
                             setShowModal(true);
                         }}
@@ -1082,6 +1085,9 @@ export default function ShopListScreen() {
                   </View>
                 );
               })}
+
+
+
               <TouchableOpacity
                 onPress={handleAddShop}
                 disabled={submitting}

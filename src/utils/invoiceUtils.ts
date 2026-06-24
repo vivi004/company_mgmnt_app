@@ -95,7 +95,7 @@ export const generateInvoiceHTML = (data: InvoiceData, vehicleNo: string = '') =
     const upiLink1 = `upi://pay?pa=${upiId1}&pn=${encodeURIComponent(upiName1)}&cu=INR`;
     const upiLink2 = `upi://pay?pa=${upiId2}&pn=${encodeURIComponent(upiName2)}&cu=INR`;
     const items = getCartItems(data.cart, data.customRates).map(it => {
-        const isLtrVariant = it.id.endsWith('_ltr');
+        const isLtrVariant = it.id.endsWith('_ltr') || it.id.endsWith('_ltr_wl');
         const sizeLower = it.size.toLowerCase();
         const is100ml = sizeLower === '100 ml';
         const is200ml = sizeLower === '200 ml';
@@ -127,7 +127,9 @@ export const generateInvoiceHTML = (data: InvoiceData, vehicleNo: string = '') =
     const LRB = 'border-left:1px solid #000;border-right:1px solid #000;border-top:none;border-bottom:1px solid #000;padding:3px 5px;vertical-align:top;';
 
     const itemRows = items.map((it, i) => {
-        let description = `${it.name.toUpperCase()} ${it.size.toUpperCase()}`;
+        let isWl = it.id.endsWith('_wl') || it.name.includes('(WL)');
+        let cleanName = it.name.replace(/\s*\(WL\)/gi, '');
+        let description = `${cleanName.toUpperCase()} ${it.size.toUpperCase()}`;
         if (it.id === 'vs-gn-500ml-box' || it.id === 'vs-gn-1l-box') {
             description = description.replace(/\s*BOX$/i, '');
         }
@@ -140,6 +142,10 @@ export const generateInvoiceHTML = (data: InvoiceData, vehicleNo: string = '') =
         description = description.replace('1 BOX (5X2L)', '2LTR BOX');
         description = description.replace('1 LTR (10X100ML)', '100ML');
         description = description.replace('1 LTR (5X200ML)', '200ML');
+
+        if (isWl) {
+            description = `${description} (WL)`;
+        }
         let u = (it.unit || 'NOS').toUpperCase();
 
         if (it.id === 'vs-gn-500ml-box' || it.id === 'vs-gn-1l-box' || it.id.endsWith('-box')) {
@@ -147,7 +153,7 @@ export const generateInvoiceHTML = (data: InvoiceData, vehicleNo: string = '') =
         } else if (/\b15\s*(LTR|KG|L|T|TIN)\b/i.test(description)) u = 'TIN';
         else if (/\b5\s*(LTR|KG|L|CAN)\b/i.test(description)) u = 'CAN';
         else if (/\bBOX\b/i.test(description) || it.id.includes('_box')) u = 'BOX';
-        else if (it.id.endsWith('_ltr') && (it.size.toLowerCase() === '100 ml' || it.size.toLowerCase() === '200 ml' || it.size.toLowerCase() === '500 ml')) u = 'LTR';
+        else if ((it.id.endsWith('_ltr') || it.id.endsWith('_ltr_wl')) && (it.size.toLowerCase() === '100 ml' || it.size.toLowerCase() === '200 ml' || it.size.toLowerCase() === '500 ml')) u = 'LTR';
         else if (/\b(100|200|500)\s*ML\b/i.test(description)) u = 'PCS';
         else if (u === 'LITRE') u = 'PCS';
 

@@ -80,7 +80,7 @@ function RepeatableButton({
 export default function OrderingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { shopId, shopName, orderLineId, villageName, areaName, specificArea, editBillId, initialCart, initialCustomPrices, phone, phone2, invoiceNo } = useLocalSearchParams<{
+  const { shopId, shopName, orderLineId, villageName, areaName, specificArea, editBillId, initialCart, initialCustomPrices, phone, phone2, invoiceNo, withoutLabelEnabled } = useLocalSearchParams<{
     shopId: string;
     shopName: string;
     orderLineId: string;
@@ -93,6 +93,7 @@ export default function OrderingScreen() {
     phone?: string;
     phone2?: string;
     invoiceNo?: string;
+    withoutLabelEnabled?: string;
   }>();
 
   const [activeCatId, setActiveCatId] = useState(SHOP_CATEGORIES[0].id);
@@ -365,6 +366,7 @@ export default function OrderingScreen() {
                 updateQuantity={updateQuantity}
                 setAbsoluteQuantity={setAbsoluteQuantity}
                 handlePriceChange={handlePriceChange}
+                isWlCategory={activeCatId === 'nisha_wl'}
               />
             )}
             ListEmptyComponent={() => (
@@ -411,7 +413,8 @@ export default function OrderingScreen() {
                 editBillId,
                 phone,
                 phone2,
-                invoiceNo
+                invoiceNo,
+                withoutLabelEnabled
               }
             } as any)}
             className="w-full bg-blue-600 flex-row items-center justify-between p-4 rounded-[32px] shadow-2xl border border-white/20"
@@ -444,13 +447,14 @@ export default function OrderingScreen() {
 }
 
 // Memoize ProductCard to prevent alignment "bugs" and re-renders when editing other products
-const ProductCard = memo(({ product, cart, customPrices, updateQuantity, setAbsoluteQuantity, handlePriceChange }: {
+const ProductCard = memo(({ product, cart, customPrices, updateQuantity, setAbsoluteQuantity, handlePriceChange, isWlCategory }: {
   product: Product;
   cart: Record<string, number>;
   customPrices: Record<string, number>;
   updateQuantity: (id: string, delta: number) => void;
   setAbsoluteQuantity: (id: string, val: number) => void;
   handlePriceChange: (id: string, val: string) => void;
+  isWlCategory: boolean;
 }) => {
   const sizeLower = product.size.toLowerCase();
   const is100ml = sizeLower === '100 ml';
@@ -506,39 +510,54 @@ const ProductCard = memo(({ product, cart, customPrices, updateQuantity, setAbso
     }
   };
 
-  const isInCart = (cart[product.id] || 0) > 0 || (cart[product.id + '_box'] || 0) > 0 || (cart[product.id + '_ltr'] || 0) > 0;
+  const isInCart = 
+    (cart[product.id] || 0) > 0 || 
+    (cart[product.id + '_wl'] || 0) > 0 || 
+    (cart[product.id + '_box'] || 0) > 0 || 
+    (cart[product.id + '_box_wl'] || 0) > 0 || 
+    (cart[product.id + '_ltr'] || 0) > 0 || 
+    (cart[product.id + '_ltr_wl'] || 0) > 0;
 
   const renderQuantityControls = () => {
     const size = product.size.toLowerCase();
     const isNisha = product.brand === 'Nisha';
 
     if (isNisha) {
-      if (size === '100 ml') return <BoxLitreControls product={product} cart={cart} customPrices={customPrices} updateQuantity={updateQuantity} setAbsoluteQuantity={setAbsoluteQuantity} handlePriceChange={handlePriceChange} boxMult={50} ltrMult={10} ltrLabel="LTR" ltrStep={1} />;
-      if (size === '200 ml') return <BoxLitreControls product={product} cart={cart} customPrices={customPrices} updateQuantity={updateQuantity} setAbsoluteQuantity={setAbsoluteQuantity} handlePriceChange={handlePriceChange} boxMult={25} ltrMult={5} ltrLabel="LTR" ltrStep={1} />;
-      if (size === '500 ml') return <BoxLitreControls product={product} cart={cart} customPrices={customPrices} updateQuantity={updateQuantity} setAbsoluteQuantity={setAbsoluteQuantity} handlePriceChange={handlePriceChange} boxMult={20} ltrMult={2} ltrLabel="LTR" ltrStep={1} />;
-      if (size === '1 litre' || size === '1 ltr' || size === '1 ltr-pet') return <BoxLitreControls product={product} cart={cart} customPrices={customPrices} updateQuantity={updateQuantity} setAbsoluteQuantity={setAbsoluteQuantity} handlePriceChange={handlePriceChange} boxMult={10} ltrMult={1} ltrLabel="PCS" ltrStep={1} />;
-      if (size === '2 ltr') return <BoxLitreControls product={product} cart={cart} customPrices={customPrices} updateQuantity={updateQuantity} setAbsoluteQuantity={setAbsoluteQuantity} handlePriceChange={handlePriceChange} boxMult={5} ltrMult={1} ltrLabel="2L-PCS" ltrStep={1} />;
+      const getSingleControls = (sBox: string, sLtr: string) => {
+        if (size === '100 ml') return <BoxLitreControls product={product} cart={cart} customPrices={customPrices} updateQuantity={updateQuantity} setAbsoluteQuantity={setAbsoluteQuantity} handlePriceChange={handlePriceChange} boxMult={50} ltrMult={10} ltrLabel="LTR" ltrStep={1} suffixBox={sBox} suffixLtr={sLtr} isWlCategory={isWlCategory} />;
+        if (size === '200 ml') return <BoxLitreControls product={product} cart={cart} customPrices={customPrices} updateQuantity={updateQuantity} setAbsoluteQuantity={setAbsoluteQuantity} handlePriceChange={handlePriceChange} boxMult={25} ltrMult={5} ltrLabel="LTR" ltrStep={1} suffixBox={sBox} suffixLtr={sLtr} isWlCategory={isWlCategory} />;
+        if (size === '500 ml') return <BoxLitreControls product={product} cart={cart} customPrices={customPrices} updateQuantity={updateQuantity} setAbsoluteQuantity={setAbsoluteQuantity} handlePriceChange={handlePriceChange} boxMult={20} ltrMult={2} ltrLabel="LTR" ltrStep={1} suffixBox={sBox} suffixLtr={sLtr} isWlCategory={isWlCategory} />;
+        if (size === '1 litre' || size === '1 ltr' || size === '1 ltr-pet') return <BoxLitreControls product={product} cart={cart} customPrices={customPrices} updateQuantity={updateQuantity} setAbsoluteQuantity={setAbsoluteQuantity} handlePriceChange={handlePriceChange} boxMult={10} ltrMult={1} ltrLabel="PCS" ltrStep={1} suffixBox={sBox} suffixLtr={sLtr} isWlCategory={isWlCategory} />;
+        if (size === '2 ltr') return <BoxLitreControls product={product} cart={cart} customPrices={customPrices} updateQuantity={updateQuantity} setAbsoluteQuantity={setAbsoluteQuantity} handlePriceChange={handlePriceChange} boxMult={5} ltrMult={1} ltrLabel="2L-PCS" ltrStep={1} suffixBox={sBox} suffixLtr={sLtr} isWlCategory={isWlCategory} />;
+        return null;
+      };
+
+      if (isWlCategory) {
+        return getSingleControls('_box_wl', ['1 litre', '1 ltr', '1 ltr-pet', '2 ltr'].includes(size) ? '_wl' : '_ltr_wl');
+      }
+
+      return getSingleControls('_box', ['1 litre', '1 ltr', '1 ltr-pet', '2 ltr'].includes(size) ? '' : '_ltr');
     }
 
     return (
-      <View className="flex-row items-center bg-blue-100/50 rounded-3xl p-1.5 mt-3 w-full border border-blue-200 shadow-inner">
+      <View className={`flex-row items-center rounded-3xl p-1.5 mt-3 w-full border shadow-inner ${isWlCategory ? 'bg-amber-100/50 border-amber-200' : 'bg-blue-100/50 border-blue-200'}`}>
         <RepeatableButton
           onPress={() => updateQuantity(product.id, -1)}
           disabled={qty === 0}
-          className="p-4 rounded-2xl bg-white shadow-sm border border-blue-100"
+          className="p-4 rounded-2xl bg-white shadow-sm border border-slate-100"
         >
-          <Feather name="minus" size={20} color={qty > 0 ? "#1E40AF" : "#CBD5E1"} />
+          <Feather name="minus" size={20} color={qty > 0 ? (isWlCategory ? "#D97706" : "#1E40AF") : "#CBD5E1"} />
         </RepeatableButton>
         <TextInput
           value={localQty ?? String(qty)}
           keyboardType="numeric"
           onChangeText={(val) => handleTextChange(product.id, val)}
           selectTextOnFocus={true}
-          className="flex-1 text-center font-black text-blue-900 text-2xl py-2"
+          className={`flex-1 text-center font-black text-2xl py-2 ${isWlCategory ? 'text-amber-900' : 'text-blue-900'}`}
         />
         <RepeatableButton
           onPress={() => updateQuantity(product.id, 1)}
-          className="p-4 rounded-2xl bg-blue-600 shadow-md border border-blue-500"
+          className={`p-4 rounded-2xl shadow-md border ${isWlCategory ? 'bg-amber-500 border-amber-600' : 'bg-blue-600 border-blue-500'}`}
         >
           <Feather name="plus" size={20} color="white" />
         </RepeatableButton>
@@ -548,17 +567,24 @@ const ProductCard = memo(({ product, cart, customPrices, updateQuantity, setAbso
 
   return (
     <View
-      className={`mb-4 p-4 rounded-[32px] border ${isInCart ? 'border-blue-600 bg-blue-100' : 'border-blue-100 bg-blue-50/70 shadow-sm'
-        }`}
+      className={`mb-4 p-4 rounded-[32px] border ${isInCart
+        ? isWlCategory ? 'border-amber-500 bg-amber-50 shadow-sm' : 'border-blue-600 bg-blue-100 shadow-sm'
+        : isWlCategory ? 'border-amber-100 bg-amber-50/20 shadow-sm' : 'border-blue-100 bg-blue-50/70 shadow-sm'
+      }`}
       style={isInCart ? { elevation: 10, shadowOpacity: 0.15, shadowRadius: 20 } : { elevation: 2 }}
     >
       <View className="flex-1">
         {/* Brand & Size */}
         <View className="flex-row items-center gap-3 mb-2">
-          <View className="bg-blue-600 px-3 py-1 rounded-lg">
+          <View className={isWlCategory ? "bg-amber-500 px-3 py-1 rounded-lg" : "bg-blue-600 px-3 py-1 rounded-lg"}>
             <Text className="text-[12px] font-black text-white uppercase tracking-widest italic">{product.brand}</Text>
           </View>
-          <Text className="text-xl text-blue-600 font-extrabold uppercase tracking-tight">{product.size}</Text>
+          <Text className={isWlCategory ? "text-xl text-amber-600 font-extrabold uppercase tracking-tight" : "text-xl text-blue-600 font-extrabold uppercase tracking-tight"}>{product.size}</Text>
+          {isWlCategory && (
+            <View className="bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-md">
+              <Text className="text-amber-700 text-[8px] font-black uppercase tracking-wider">WITHOUT LABEL</Text>
+            </View>
+          )}
         </View>
 
         {/* Product Name & Unit Price */}
@@ -609,7 +635,7 @@ const ProductCard = memo(({ product, cart, customPrices, updateQuantity, setAbso
 });
 ProductCard.displayName = 'ProductCard';
 
-const BoxLitreControls = memo(({ product, cart, customPrices, updateQuantity, setAbsoluteQuantity, handlePriceChange, boxMult, ltrMult, ltrLabel, ltrStep }: {
+const BoxLitreControls = memo(({ product, cart, customPrices, updateQuantity, setAbsoluteQuantity, handlePriceChange, boxMult, ltrMult, ltrLabel, ltrStep, suffixBox = '_box', suffixLtr = '_ltr', isWlCategory }: {
   product: Product;
   cart: Record<string, number>;
   customPrices: Record<string, number>;
@@ -620,9 +646,12 @@ const BoxLitreControls = memo(({ product, cart, customPrices, updateQuantity, se
   ltrMult: number;
   ltrLabel: string;
   ltrStep: number;
+  suffixBox?: string;
+  suffixLtr?: string;
+  isWlCategory?: boolean;
 }) => {
-  const boxId = product.id + '_box';
-  const ltrId = product.id + (['PCS', '2L-PCS'].includes(ltrLabel) ? '' : '_ltr');
+  const boxId = product.id + suffixBox;
+  const ltrId = product.id + suffixLtr;
 
   const boxQty = cart[boxId] || 0;
   const ltrQty = cart[ltrId] || 0;
@@ -656,29 +685,35 @@ const BoxLitreControls = memo(({ product, cart, customPrices, updateQuantity, se
   const displayBoxPrice = isNaN(currentUnitPrice) ? 0 : (currentUnitPrice * boxMult);
   const displayLtrPrice = isNaN(currentUnitPrice) ? 0 : (currentUnitPrice * ltrMult);
 
+  const textClass = isWlCategory ? 'text-amber-800' : 'text-blue-800';
+  const priceClass = isWlCategory ? 'text-amber-600' : 'text-blue-600';
+  const qtyTextClass = isWlCategory ? 'text-amber-900' : 'text-blue-900';
+  const borderClass = isWlCategory ? 'border-amber-200/50' : 'border-blue-200/50';
+  const plusBgClass = isWlCategory ? 'bg-amber-500' : 'bg-blue-600';
+
   return (
     <View className="flex-col gap-4 mt-2">
       <View className="w-full">
         <View className="flex-row items-center justify-between mb-2 px-1 gap-2">
-          <Text className="text-[12px] font-black text-blue-800 uppercase tracking-widest">Qty. Box</Text>
-          <Text className="text-[14px] font-black text-blue-600">₹{displayBoxPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
+          <Text className={`text-[12px] font-black uppercase tracking-widest ${textClass}`}>Qty. Box</Text>
+          <Text className={`text-[14px] font-black ${priceClass}`}>₹{displayBoxPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
         </View>
-        <View className="flex-row items-center bg-white/60 border border-blue-200/50 rounded-2xl p-1 shadow-sm">
+        <View className={`flex-row items-center bg-white/60 border rounded-2xl p-1 shadow-sm ${borderClass}`}>
           <RepeatableButton 
               onPress={() => updateQuantity(boxId, -1)} 
               disabled={boxQty === 0}
-              className="py-3.5 px-2.5 rounded-xl bg-white shadow-sm border border-blue-100"
+              className="py-3.5 px-2.5 rounded-xl bg-white shadow-sm border border-slate-100"
           >
-            <Feather name="minus" size={16} color={boxQty > 0 ? "#1E40AF" : "#CBD5E1"} />
+            <Feather name="minus" size={16} color={boxQty > 0 ? (isWlCategory ? "#D97706" : "#1E40AF") : "#CBD5E1"} />
           </RepeatableButton>
           <TextInput
               value={localBox ?? String(boxQty)}
               keyboardType="numeric"
               onChangeText={(val) => handleTextChange(boxId, val, setLocalBox)}
               selectTextOnFocus={true}
-              className="flex-1 text-center font-black text-blue-900 text-xl py-2"
+              className={`flex-1 text-center font-black text-xl py-2 ${qtyTextClass}`}
           />
-          <RepeatableButton onPress={() => updateQuantity(boxId, 1)} className="py-3.5 px-2.5 rounded-xl bg-blue-600 shadow-md">
+          <RepeatableButton onPress={() => updateQuantity(boxId, 1)} className={`py-3.5 px-2.5 rounded-xl shadow-md ${plusBgClass}`}>
             <Feather name="plus" size={16} color="white" />
           </RepeatableButton>
         </View>
@@ -686,25 +721,25 @@ const BoxLitreControls = memo(({ product, cart, customPrices, updateQuantity, se
 
       <View className="w-full">
         <View className="flex-row items-center justify-between mb-2 px-1 gap-2">
-          <Text className="text-[12px] font-black text-blue-800 uppercase tracking-widest">Qty. {ltrLabel}</Text>
-          <Text className="text-[14px] font-black text-blue-600">₹{displayLtrPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
+          <Text className={`text-[12px] font-black uppercase tracking-widest ${textClass}`}>Qty. {ltrLabel}</Text>
+          <Text className={`text-[14px] font-black ${priceClass}`}>₹{displayLtrPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
         </View>
-        <View className="flex-row items-center bg-white/60 border border-blue-200/50 rounded-2xl p-1 shadow-sm">
+        <View className={`flex-row items-center bg-white/60 border rounded-2xl p-1 shadow-sm ${borderClass}`}>
           <RepeatableButton 
               onPress={() => updateQuantity(ltrId, -ltrStep)} 
               disabled={ltrQty === 0}
-              className="py-3.5 px-2.5 rounded-xl bg-white shadow-sm border border-blue-100"
+              className="py-3.5 px-2.5 rounded-xl bg-white shadow-sm border border-slate-100"
           >
-            <Feather name="minus" size={16} color={ltrQty > 0 ? "#1E40AF" : "#CBD5E1"} />
+            <Feather name="minus" size={16} color={ltrQty > 0 ? (isWlCategory ? "#D97706" : "#1E40AF") : "#CBD5E1"} />
           </RepeatableButton>
           <TextInput
               value={localLtr ?? String(ltrQty)}
               keyboardType="numeric"
               onChangeText={(val) => handleTextChange(ltrId, val, setLocalLtr)}
               selectTextOnFocus={true}
-              className="flex-1 text-center font-black text-blue-900 text-xl py-2"
+              className={`flex-1 text-center font-black text-xl py-2 ${qtyTextClass}`}
           />
-          <RepeatableButton onPress={() => updateQuantity(ltrId, ltrStep)} className="py-3.5 px-2.5 rounded-xl bg-blue-600 shadow-md">
+          <RepeatableButton onPress={() => updateQuantity(ltrId, ltrStep)} className={`py-3.5 px-2.5 rounded-xl shadow-md ${plusBgClass}`}>
             <Feather name="plus" size={16} color="white" />
           </RepeatableButton>
         </View>
