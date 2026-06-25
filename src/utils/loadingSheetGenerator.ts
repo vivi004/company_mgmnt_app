@@ -202,14 +202,14 @@ export function generateLoadingSheetHTML(bills: Bill[], dateStr: string, vehicle
     }
 
     const B = 'border-bottom:1px solid #000;padding:6px 4px;';
-    const BH = 'border-bottom:1px solid #000;font-weight:bold;font-size:11px;padding:8px 4px;';
+    const BH = 'border-bottom:1px solid #000;font-weight:bold;font-size:13px;padding:8px 4px;';
 
     let productRows = '';
     groups.forEach(g => {
         if (isPlayer) {
             productRows += `<tr><td colspan="3" class="category-header">${g.categoryName}</td></tr>`;
         } else {
-            productRows += `<tr><td colspan="6" style="padding:10px 4px 6px 4px;font-weight:bold;font-size:11px;text-transform:uppercase">${g.categoryName}</td></tr>`;
+            productRows += `<tr><td colspan="6" style="padding:10px 4px 6px 4px;font-weight:bold;font-size:13px;text-transform:uppercase">${g.categoryName}</td></tr>`;
         }
 
         g.items.forEach((it, i) => {
@@ -222,12 +222,12 @@ export function generateLoadingSheetHTML(bills: Bill[], dateStr: string, vehicle
                 </tr>`;
             } else {
                 productRows += `<tr>
-                    <td style="${B}text-align:center;font-size:11px;width:30px">${i + 1}</td>
-                    <td style="${B}font-size:11px;width:280px">${it.name}</td>
-                    <td style="${B}text-align:right;font-size:11px;width:60px">${it.mrp.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td style="${B}text-align:right;font-size:11px;width:100px">${fmtQty} ${it.unit}</td>
-                    <td style="${B}text-align:right;font-size:11px;width:80px">${it.rate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td style="${B}text-align:right;font-size:11px;width:100px">${it.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td style="${B}text-align:center;font-size:13px;font-weight:bold;width:30px">${i + 1}</td>
+                    <td style="${B}font-size:13px;font-weight:bold;width:280px">${it.name}</td>
+                    <td style="${B}text-align:right;font-size:13px;font-weight:bold;width:100px">${fmtQty} ${it.unit}</td>
+                    <td style="${B}text-align:right;font-size:13px;font-weight:bold;width:80px">${it.rate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td style="${B}text-align:right;font-size:13px;font-weight:bold;width:100px">${it.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td style="${B}text-align:right;font-size:13px;font-weight:bold;width:60px">${it.mrp.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                 </tr>`;
             }
         });
@@ -239,10 +239,9 @@ export function generateLoadingSheetHTML(bills: Bill[], dateStr: string, vehicle
             </tr>`;
         } else {
             productRows += `<tr>
-                <td colspan="3" style="text-align:right;font-weight:bold;font-size:11px;padding:6px 0">Total :</td>
+                <td colspan="4" style="text-align:right;font-weight:bold;font-size:13px;padding:6px 0">Total :</td>
+                <td style="text-align:right;font-weight:bold;font-size:13px;padding:6px 4px">${g.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                 <td style="padding:6px 4px"></td>
-                <td style="padding:6px 0"></td>
-                <td style="text-align:right;font-weight:bold;font-size:11px;padding:6px 4px">${g.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
             </tr>`;
         }
     });
@@ -325,12 +324,12 @@ export function generateLoadingSheetHTML(bills: Bill[], dateStr: string, vehicle
     let shopRows = '';
     shopLines.forEach(sl => {
         shopRows += `<tr>
-            <td style="${B}text-align:center;font-size:11px">${sl.sno}</td>
-            <td style="${B}text-align:center;font-size:11px">${sl.invoiceNo}</td>
-            <td style="${B}font-size:11px">${sl.partyName}</td>
-            <td style="${B}text-align:right;font-size:11px">${sl.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-            <td style="${B}font-size:11px"></td>
-            <td style="${B}font-size:11px"></td>
+            <td style="${B}text-align:center;font-size:13px;font-weight:bold">${sl.sno}</td>
+            <td style="${B}text-align:center;font-size:13px;font-weight:bold">${sl.invoiceNo}</td>
+            <td style="${B}font-size:13px;font-weight:bold">${sl.partyName}</td>
+            <td style="${B}text-align:right;font-size:13px;font-weight:bold">${sl.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            <td style="${B}font-size:13px;font-weight:bold"></td>
+            <td style="${B}font-size:13px;font-weight:bold"></td>
         </tr>`;
     });
 
@@ -342,12 +341,12 @@ export function generateLoadingSheetHTML(bills: Bill[], dateStr: string, vehicle
         @page{size:A4 portrait;margin:8mm}
         @media print{body{padding:5px}}
     </style></head><body>
-    <h2 style="text-align:center;font-size:16px;margin-bottom:2px">New Loading Sheet</h2>
+    <h2 style="text-align:center;font-size:18px;margin-bottom:2px">New Loading Sheet</h2>
     <table style="margin-bottom:4px">
         <tr>
-            <td style="font-size:12px;font-weight:bold">Stock Group : Primary<br>Vehicle No: <span style="text-transform:uppercase">${vehicleNo || '-'}</span></td>
-            <td style="font-size:12px;text-align:center">Period :</td>
-            <td style="font-size:12px;text-align:right;font-weight:bold">For ${displayDate}</td>
+            <td style="font-size:13px;font-weight:bold">Stock Group : Primary<br>Vehicle No: <span style="text-transform:uppercase">${vehicleNo || '-'}</span></td>
+            <td style="font-size:13px;text-align:center">Period :</td>
+            <td style="font-size:13px;text-align:right;font-weight:bold">For ${displayDate}</td>
         </tr>
     </table>
 
@@ -357,10 +356,10 @@ export function generateLoadingSheetHTML(bills: Bill[], dateStr: string, vehicle
             <tr>
                 <th style="${BH}text-align:center;width:30px">S.No</th>
                 <th style="${BH}">Particulars</th>
-                <th style="${BH}text-align:right">MRP</th>
                 <th style="${BH}text-align:right">Quantity</th>
                 <th style="${BH}text-align:right">Rate</th>
                 <th style="${BH}text-align:right">Amount</th>
+                <th style="${BH}text-align:right">MRP</th>
             </tr>
         </thead>
         <tbody>${productRows}</tbody>
@@ -386,14 +385,14 @@ export function generateLoadingSheetHTML(bills: Bill[], dateStr: string, vehicle
     <div style="height:10px"></div>
     <table>
         <tr>
-            <td style="font-size:12px;font-weight:bold;padding:4px 0">Total Sales Value :</td>
-            <td style="font-size:14px;font-weight:bold;text-align:right;padding:4px 0;border-top:2px solid #000;border-bottom:1px solid #000">
+            <td style="font-size:13px;font-weight:bold;padding:4px 0">Total Sales Value :</td>
+            <td style="font-size:16px;font-weight:bold;text-align:right;padding:4px 0;border-top:2px solid #000;border-bottom:1px solid #000">
                 ${grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </td>
         </tr>
         <tr>
-            <td style="font-size:12px;font-weight:bold;padding:4px 0">Net Total :</td>
-            <td style="font-size:14px;font-weight:bold;text-align:right;padding:4px 0;border-bottom:2px solid #000">
+            <td style="font-size:13px;font-weight:bold;padding:4px 0">Net Total :</td>
+            <td style="font-size:16px;font-weight:bold;text-align:right;padding:4px 0;border-bottom:2px solid #000">
                 ${grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </td>
         </tr>

@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import API_BASE_URL from '../config/api';
 
-const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+const SESSION_DURATION = 48 * 60 * 60 * 1000; // 48 hours in milliseconds
 
 interface LoginResponse {
   success: boolean;

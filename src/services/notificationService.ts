@@ -1,25 +1,47 @@
-import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import API_BASE_URL from '../config/api';
 import { getAuthToken } from './authService';
+import { isRunningInExpoGo } from 'expo';
 
-// Configure how notifications are displayed when the app is in the foreground
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// Only load and configure expo-notifications if we are NOT running inside Expo Go
+let Notifications: any = null;
+
+if (!isRunningInExpoGo()) {
+  try {
+    Notifications = require('expo-notifications');
+    // Configure how notifications are displayed when the app is in the foreground
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+  } catch (err) {
+    console.error('[PUSH] Failed to require expo-notifications dynamically:', err);
+  }
+} else {
+  console.log('[PUSH] Running inside Expo Go: Push notifications are disabled to prevent app crash.');
+}
 
 /**
  * Registers this device for push notifications, retrieves the token,
  * and sends it to the backend for the current employee.
  */
 export async function registerForPushNotificationsAsync(employeeId: number): Promise<string | null> {
+  if (isRunningInExpoGo()) {
+    console.log('[PUSH] Skip registration: Running in Expo Go');
+    return null;
+  }
+
+  if (!Notifications) {
+    console.log('[PUSH] Skip registration: expo-notifications module not loaded');
+    return null;
+  }
+
   if (!Device.isDevice) {
     console.log('[PUSH] Must use physical device for Push Notifications');
     return null;
