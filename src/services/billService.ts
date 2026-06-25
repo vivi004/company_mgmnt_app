@@ -55,6 +55,17 @@ export const verifyBill = async (id: number): Promise<void> => {
   if (!res.ok) throw new Error('Failed to verify bill');
 };
 
+export const verifyBillsBatch = async (ids: number[]): Promise<void> => {
+  const res = await authenticatedFetch(`${API_BASE_URL}/bills/verify/batch`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ ids }),
+  });
+  if (!res.ok) throw new Error('Failed to verify bills batch');
+};
+
 export const updateBill = async (id: number, billData: Partial<Bill>): Promise<Bill> => {
   const res = await authenticatedFetch(`${API_BASE_URL}/bills/${id}`, {
     method: 'PUT',

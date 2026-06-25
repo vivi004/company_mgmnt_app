@@ -3,11 +3,25 @@ import { View, Text, TouchableOpacity, Image, ScrollView } from 'react-native';
 import { DrawerContentComponentProps } from '@react-navigation/drawer';
 import { Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { logout } from '../../services/authService';
 import { useRouter } from 'expo-router';
 
 export default function CustomSidebar(props: DrawerContentComponentProps) {
   const router = useRouter();
+  const [userRole, setUserRole] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const loadRole = async () => {
+      try {
+        const role = await AsyncStorage.getItem('userRole');
+        setUserRole(role);
+      } catch (e) {
+        console.warn('Failed to load userRole in CustomSidebar:', e);
+      }
+    };
+    loadRole();
+  }, []);
   
   // Get current active route from state safely
   const activeIndex = props.state?.index ?? 0;
@@ -18,13 +32,25 @@ export default function CustomSidebar(props: DrawerContentComponentProps) {
     router.replace('/login');
   };
 
-  const navItems = [
+  const baseNavItems = [
     { name: 'Product Rates', route: 'product-rates', icon: 'tag' },
     { name: 'Order Lines', route: 'order-lines', icon: 'clipboard' },
     { name: 'Bill Check', route: 'bill-check', icon: 'check-circle' },
     { name: 'Today Collection', route: 'collections', icon: 'bar-chart-2' },
     { name: 'Settings', route: 'settings', icon: 'settings' }
   ];
+
+  const navItems = React.useMemo(() => {
+    const restrictedRole = userRole?.toLowerCase() === 'player';
+    if (restrictedRole) {
+      return baseNavItems.filter(item => 
+        item.route === 'product-rates' || 
+        item.route === 'bill-check' || 
+        item.route === 'settings'
+      );
+    }
+    return baseNavItems;
+  }, [userRole]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#0F172A' }} edges={['top', 'bottom']}>
@@ -41,7 +67,7 @@ export default function CustomSidebar(props: DrawerContentComponentProps) {
           <View style={{ marginLeft: 16 }}>
             <Text style={{ color: 'white', fontSize: 24, fontWeight: '900' }}>Nisha</Text>
             <Text style={{ color: '#60A5FA', fontSize: 10, fontWeight: '700', letterSpacing: 1.5, marginTop: 2 }}>
-              STAFF ACCESS
+              {userRole?.toLowerCase() === 'player' ? 'PLAYER ACCESS' : userRole?.toLowerCase() === 'viewer' ? 'VIEWER ACCESS' : 'STAFF ACCESS'}
             </Text>
           </View>
         </View>

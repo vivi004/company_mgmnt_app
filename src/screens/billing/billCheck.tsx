@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,12 +8,14 @@ import {
   ActivityIndicator,
   TextInput,
   RefreshControl,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { DrawerActions, useNavigation } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
+import { WebView } from 'react-native-webview';
 import * as billService from '../../services/billService';
 import { getUserData } from '../../services/authService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -22,6 +24,7 @@ import { formatIST, parseIST } from '../../utils/dateUtils';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { generateLoadingSheetHTML } from '../../utils/loadingSheetGenerator';
+import { generateInvoiceHTML } from '../../utils/invoiceUtils';
 
 export default function BillCheckScreen() {
   const router = useRouter();
@@ -32,6 +35,12 @@ export default function BillCheckScreen() {
   const [userRole, setUserRole] = useState<string>('staff');
   const [userName, setUserName] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Loading sheet preview states
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [isPreviewVisible, setIsPreviewVisible] = useState(false);
+  const [previewTitle, setPreviewTitle] = useState('');
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -64,6 +73,61 @@ export default function BillCheckScreen() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const [upiSettings, setUpiSettings] = useState({
+    upiId1: 'nishaoilmills@ybl',
+    upiName1: 'NISHA OIL MILL',
+    upiId2: 'nishaoilmills@okaxis',
+    upiName2: 'NISHA OIL MILL',
+  });
+
+  useEffect(() => {
+    const loadUpiSettings = async () => {
+      try {
+        const storedUpiId1 = await AsyncStorage.getItem('upiId1');
+        const storedUpiName1 = await AsyncStorage.getItem('upiName1');
+        const storedUpiId2 = await AsyncStorage.getItem('upiId2');
+        const storedUpiName2 = await AsyncStorage.getItem('upiName2');
+        
+        setUpiSettings({
+          upiId1: storedUpiId1 || 'nishaoilmills@ybl',
+          upiName1: storedUpiName1 || 'NISHA OIL MILL',
+          upiId2: storedUpiId2 || 'nishaoilmills@okaxis',
+          upiName2: storedUpiName2 || 'NISHA OIL MILL',
+        });
+      } catch (e) {
+        console.error('Failed to load UPI settings', e);
+      }
+    };
+    loadUpiSettings();
+  }, []);
+
+  const handleShowBillPreview = (bill: billService.Bill) => {
+    try {
+      const invoiceData = {
+        shopName: bill.shop_name || 'Unknown Shop',
+        villageName: bill.village_name || 'Unknown village',
+        areaName: bill.area_name || '',
+        specificArea: bill.specific_area || '',
+        cart: bill.cart || {},
+        customRates: bill.custom_rates || {},
+        invoiceNo: Number(bill.invoice_no || 0),
+        date: bill.bill_date || new Date().toISOString(),
+        deliveryDate: bill.delivery_date || bill.bill_date || new Date().toISOString(),
+        phone: bill.phone || '',
+        phone2: bill.phone2 || '',
+        oldBalance: Number(bill.old_balance ?? bill.oldBalance ?? 0),
+        ...upiSettings
+      };
+      const html = generateInvoiceHTML(invoiceData);
+      setPreviewHtml(html);
+      setPreviewTitle(`Bill Preview - INV-${bill.invoice_no}`);
+      setIsPreviewVisible(true);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to generate Bill HTML');
+      console.error(error);
+    }
+  };
 
   const handleVerify = (id: number) => {
     Alert.alert(
@@ -120,26 +184,15 @@ export default function BillCheckScreen() {
         {
           text: 'Verify All',
           onPress: async () => {
-            let successCount = 0;
-            let failedInvoices: string[] = [];
-            for (const bill of bills) {
-              try {
-                await billService.verifyBill(bill.id);
-                successCount++;
-              } catch (error) {
-                failedInvoices.push(`INV-${bill.invoice_no}`);
-              }
-            }
-            if (failedInvoices.length === 0) {
-              Alert.alert('Success', `${successCount} bills verified successfully!`, [
+            try {
+              const billIds = bills.map(b => b.id);
+              await billService.verifyBillsBatch(billIds);
+              Alert.alert('Success', `${bills.length} bills verified successfully!`, [
                 { text: 'OK', onPress: () => loadData() }
               ]);
-            } else {
-              Alert.alert(
-                'Verification Summary',
-                `Successfully verified ${successCount} bills.\n\nFailed to verify ${failedInvoices.length} bills:\n${failedInvoices.join(', ')}\n\nPlease check your network connection and try again.`,
-                [{ text: 'OK', onPress: () => loadData() }]
-              );
+            } catch (error) {
+              Alert.alert('Error', 'Failed to verify bills batch. Please check your network connection and try again.');
+              loadData();
             }
           }
         }
@@ -167,28 +220,41 @@ export default function BillCheckScreen() {
     } as any);
   };
 
-  const handlePrintAllLoadingSheet = async () => {
+  const handleShowAllLoadingSheetPreview = () => {
     if (filteredBills.length === 0) return;
     try {
       const d = new Date();
       const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      const html = generateLoadingSheetHTML(filteredBills, today);
-      const { uri } = await Print.printToFileAsync({ html });
-      await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+      const html = generateLoadingSheetHTML(filteredBills, today, '', userRole?.toLowerCase() === 'player');
+      setPreviewHtml(html);
+      setPreviewTitle('All Loading Sheets');
+      setIsPreviewVisible(true);
     } catch (error) {
-      Alert.alert('Error', 'Failed to generate Loading Sheet PDF');
+      Alert.alert('Error', 'Failed to generate Loading Sheet HTML');
       console.error(error);
     }
   };
 
-  const handlePrintSingleLoadingSheet = async (bill: billService.Bill) => {
+  const handleShowSingleLoadingSheetPreview = (bill: billService.Bill) => {
     try {
       const datePart = (bill.delivery_date || bill.bill_date || '').split('T')[0];
-      const html = generateLoadingSheetHTML([bill], datePart);
-      const { uri } = await Print.printToFileAsync({ html });
+      const html = generateLoadingSheetHTML([bill], datePart, '', userRole?.toLowerCase() === 'player');
+      setPreviewHtml(html);
+      setPreviewTitle(`Loading Sheet - INV-${bill.invoice_no}`);
+      setIsPreviewVisible(true);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to generate Loading Sheet HTML');
+      console.error(error);
+    }
+  };
+
+  const handleSharePreviewPdf = async () => {
+    if (!previewHtml) return;
+    try {
+      const { uri } = await Print.printToFileAsync({ html: previewHtml });
       await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
     } catch (error) {
-      Alert.alert('Error', 'Failed to generate Loading Sheet PDF');
+      Alert.alert('Error', 'Failed to generate PDF');
       console.error(error);
     }
   };
@@ -208,6 +274,16 @@ export default function BillCheckScreen() {
       b.invoice_no.toString().includes(q) ||
       (dateStr && dateStr.includes(q));
   });
+
+  const groupedBills = React.useMemo(() => {
+    const groups: Record<string, billService.Bill[]> = {};
+    filteredBills.forEach(bill => {
+      const creator = bill.created_by || 'Unknown';
+      if (!groups[creator]) groups[creator] = [];
+      groups[creator].push(bill);
+    });
+    return groups;
+  }, [filteredBills]);
 
   return (
     <View style={{ flex: 1, backgroundColor: '#F8FAFC', paddingTop: insets.top }}>
@@ -256,16 +332,18 @@ export default function BillCheckScreen() {
 
         {bills.length > 0 ? (
           <View className="mt-3 flex-row gap-2">
-            <TouchableOpacity
-              onPress={handleVerifyAll}
-              className="flex-1 py-3 bg-emerald-600 rounded-[16px] shadow-lg shadow-emerald-600/20 flex-row items-center justify-center gap-2"
-            >
-              <Feather name="check-circle" size={16} color="white" />
-              <Text className="text-white font-black text-[9px] uppercase tracking-widest">Verify All</Text>
-            </TouchableOpacity>
+            {userRole?.toLowerCase() !== 'player' && userRole?.toLowerCase() !== 'viewer' && (
+              <TouchableOpacity
+                onPress={handleVerifyAll}
+                className="flex-1 py-3 bg-emerald-600 rounded-[16px] shadow-lg shadow-emerald-600/20 flex-row items-center justify-center gap-2"
+              >
+                <Feather name="check-circle" size={16} color="white" />
+                <Text className="text-white font-black text-[9px] uppercase tracking-widest">Verify All</Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
-              onPress={handlePrintAllLoadingSheet}
+              onPress={handleShowAllLoadingSheetPreview}
               className="flex-1 py-3 bg-blue-600 rounded-[16px] shadow-lg shadow-blue-600/20 flex-row items-center justify-center gap-2"
             >
               <Feather name="file-text" size={16} color="white" />
@@ -316,134 +394,247 @@ export default function BillCheckScreen() {
           </View>
         ) : (
           <View className="px-4">
-            {filteredBills.map(bill => (
-              <View key={bill.id} className="bg-white rounded-[32px] border border-slate-100 p-6 mb-4 shadow-xl shadow-slate-200/50">
-                <View className="flex-row flex-wrap items-center gap-2 mb-2">
-                  <Text className="text-xl font-black text-[#1E293B]">{bill.shop_name}</Text>
-                  <View className="px-2 py-1 bg-slate-50 rounded-lg border border-slate-100">
-                    <Text className="text-[10px] font-black text-slate-500">INV-{bill.invoice_no}</Text>
-                  </View>
-                  {bill.is_edited_price ? (
-                     <View className="px-2 py-1 bg-red-100/50 rounded-lg border border-red-200">
-                       <Text className="text-[10px] font-black text-red-600 uppercase tracking-widest">Edited Price</Text>
-                     </View>
-                  ) : null}
+            {Object.entries(groupedBills).map(([staffName, staffBills]) => (
+              <View key={staffName} className="mb-6">
+                <View className="flex-row items-center justify-between px-5 py-3 bg-slate-100 rounded-3xl mb-4 border border-slate-200">
+                  <TouchableOpacity
+                    onPress={() => setExpandedGroups(prev => ({ ...prev, [staffName]: !prev[staffName] }))}
+                    className="flex-row items-center gap-2 flex-1 py-1"
+                  >
+                    <Feather 
+                      name={expandedGroups[staffName] ? "chevron-up" : "chevron-down"} 
+                      size={18} 
+                      color="#2563EB" 
+                    />
+                    <Text className="text-xs font-black text-blue-600 uppercase tracking-widest">{staffName}'s Bills</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => {
+                      try {
+                        const d = new Date();
+                        const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                        const html = generateLoadingSheetHTML(staffBills, today, '', userRole?.toLowerCase() === 'player');
+                        setPreviewHtml(html);
+                        setPreviewTitle(`Loading Sheet - ${staffName}`);
+                        setIsPreviewVisible(true);
+                      } catch (error) {
+                        Alert.alert('Error', 'Failed to generate Loading Sheet HTML');
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-emerald-500/10 rounded-xl border border-emerald-500/20"
+                  >
+                    <Text className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Loading Sheet</Text>
+                  </TouchableOpacity>
                 </View>
-                <Text className="text-xs font-black text-blue-500 uppercase tracking-widest mb-4">
-                  {bill.specific_area || bill.area_name || bill.village_name}
-                </Text>
 
-                <View className="mb-4">
-                  <Text className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1">Status</Text>
-                  <Text className="text-base font-black text-amber-600 uppercase tracking-tighter">
-                    Awaiting Verification
-                  </Text>
-                  <View className="mt-2">
-                    <View className="flex-row items-center gap-2">
-                      {(() => {
-                        const d = parseIST(bill.delivery_date || bill.bill_date);
-                        const tomorrow = new Date();
-                        tomorrow.setDate(tomorrow.getDate() + 1);
-                        const isTomorrow = d.getDate() === tomorrow.getDate() &&
-                          d.getMonth() === tomorrow.getMonth() &&
-                          d.getFullYear() === tomorrow.getFullYear();
-
-                        return (
-                          <View className="flex-row items-center">
-                            <Text className="text-sm font-black text-blue-600">
-                              {formatIST(d, { hour: undefined, minute: undefined })}
-                            </Text>
-                            {isTomorrow ? (
-                              <View className="ml-2 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100">
-                                <Text className="text-[9px] font-black text-emerald-500">TOMORROW</Text>
-                              </View>
-                            ) : null}
+                {expandedGroups[staffName] && staffBills.map(bill => {
+                  const isPlayer = userRole?.toLowerCase() === 'player';
+                  return (
+                    <View key={bill.id} className={`bg-white rounded-[32px] border border-slate-100 mb-4 shadow-xl shadow-slate-200/50 ${isPlayer ? 'p-4' : 'p-6'}`}>
+                      <View className="flex-row flex-wrap items-center gap-2 mb-2">
+                        <Text className="text-xl font-black text-[#1E293B]">
+                          {bill.shop_name} {bill.created_by && <Text className="text-xs font-bold text-slate-500 normal-case font-normal">({bill.created_by})</Text>}
+                        </Text>
+                        <View className="px-2 py-1 bg-slate-50 rounded-lg border border-slate-100">
+                          <Text className="text-[10px] font-black text-slate-500">INV-{bill.invoice_no}</Text>
+                        </View>
+                        {bill.is_edited_price ? (
+                          <View className="px-2 py-1 bg-red-100/50 rounded-lg border border-red-200">
+                            <Text className="text-[10px] font-black text-red-600 uppercase tracking-widest">Edited Price</Text>
                           </View>
-                        );
-                      })()}
+                        ) : null}
+                      </View>
+                      <Text className="text-xs font-black text-blue-500 uppercase tracking-widest mb-4">
+                        {bill.specific_area || bill.area_name || bill.village_name}
+                      </Text>
+
+                      {!isPlayer && (
+                        <>
+                          <View className="mb-4">
+                            <Text className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1">Status</Text>
+                            <Text className="text-base font-black text-amber-600 uppercase tracking-tighter">
+                              Awaiting Verification
+                            </Text>
+                            <View className="mt-2">
+                              <View className="flex-row items-center gap-2">
+                                {(() => {
+                                  const d = parseIST(bill.delivery_date || bill.bill_date);
+                                  const tomorrow = new Date();
+                                  tomorrow.setDate(tomorrow.getDate() + 1);
+                                  const isTomorrow = d.getDate() === tomorrow.getDate() &&
+                                    d.getMonth() === tomorrow.getMonth() &&
+                                    d.getFullYear() === tomorrow.getFullYear();
+
+                                  return (
+                                    <View className="flex-row items-center">
+                                      <Text className="text-sm font-black text-blue-600">
+                                        {formatIST(d, { hour: undefined, minute: undefined })}
+                                      </Text>
+                                      {isTomorrow ? (
+                                        <View className="ml-2 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100">
+                                          <Text className="text-[9px] font-black text-emerald-500">TOMORROW</Text>
+                                        </View>
+                                      ) : null}
+                                    </View>
+                                  );
+                                })()}
+                              </View>
+                              <Text className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">
+                                Order Taken: {formatIST(bill.bill_date)}
+                              </Text>
+                            </View>
+                          </View>
+
+                          <View className="flex-row items-center justify-between py-5 border-t border-b border-slate-50 border-dashed mb-4">
+                            <View>
+                              <Text className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Items</Text>
+                              <Text className="text-2xl font-black text-[#1E293B]">{getItemCount(bill.cart)}</Text>
+                            </View>
+                            <View className="items-end">
+                              <Text className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Value</Text>
+                              <Text className="text-2xl font-black text-[#1E293B]">
+                                ₹{getTotalValue(bill.cart, bill.custom_rates).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              </Text>
+                            </View>
+                          </View>
+                        </>
+                      )}
+
+                      <View className="flex-row items-center justify-between mt-2">
+                        <View className="flex-row items-center gap-2">
+                          <TouchableOpacity
+                            onPress={() => handleShowBillPreview(bill)}
+                            className="w-12 h-12 rounded-2xl bg-white border border-slate-200 items-center justify-center shadow-sm"
+                          >
+                            <Feather name="eye" size={20} color="#64748B" />
+                          </TouchableOpacity>
+
+                          {userRole?.toLowerCase() !== 'player' && userRole?.toLowerCase() !== 'viewer' && (
+                            <TouchableOpacity
+                              onPress={() => handleNavigateToEdit(bill)}
+                              className="w-12 h-12 rounded-2xl bg-white border border-slate-200 items-center justify-center shadow-sm"
+                            >
+                              <Feather name="edit-2" size={20} color="#64748B" />
+                            </TouchableOpacity>
+                          )}
+
+                          <TouchableOpacity
+                            onPress={() => handleShowSingleLoadingSheetPreview(bill)}
+                            className="w-12 h-12 rounded-2xl bg-white border border-slate-200 items-center justify-center shadow-sm"
+                          >
+                            <Feather name="file-text" size={20} color="#10B981" />
+                          </TouchableOpacity>
+                        </View>
+
+                        {userRole?.toLowerCase() !== 'player' && userRole?.toLowerCase() !== 'viewer' && (
+                          <View className="flex-row items-center gap-3">
+                            <TouchableOpacity onPress={() => handleReject(bill.id)} className="px-2">
+                              <Text className="text-red-500 font-black text-[10px] uppercase tracking-widest">Reject</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                              onPress={() => handleVerify(bill.id)}
+                              className="px-6 py-4 bg-[#2563EB] rounded-2xl shadow-lg shadow-blue-600/30"
+                            >
+                              <Text className="text-white font-black text-[10px] uppercase tracking-widest font-bold">Verify ✓</Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+                      </View>
                     </View>
-                    <Text className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">
-                      Order Taken: {formatIST(bill.bill_date)}
-                    </Text>
-                  </View>
-                </View>
-
-                <View className="flex-row items-center justify-between py-5 border-t border-b border-slate-50 border-dashed">
-                  <View>
-                    <Text className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Items</Text>
-                    <Text className="text-2xl font-black text-[#1E293B]">{getItemCount(bill.cart)}</Text>
-                  </View>
-                  <View className="items-end">
-                    <Text className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Value</Text>
-                    <Text className="text-2xl font-black text-[#1E293B]">
-                      ₹{getTotalValue(bill.cart, bill.custom_rates).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </Text>
-                  </View>
-                </View>
-
-                <View className="flex-row items-center justify-between mt-6">
-                  <View className="flex-row items-center gap-2">
-                    <TouchableOpacity
-                      onPress={() => {
-                        router.push({
-                          pathname: '/invoice',
-                          params: {
-                            cart: JSON.stringify(bill.cart),
-                            customRates: JSON.stringify(bill.custom_rates || {}),
-                            shopName: bill.shop_name,
-                            villageName: bill.village_name,
-                            areaName: bill.area_name || bill.village_name,
-                            specificArea: bill.specific_area || '',
-                            invoiceNo: bill.invoice_no.toString(),
-                            date: bill.bill_date,
-                            deliveryDate: bill.delivery_date || bill.bill_date,
-                            shopId: (bill.shop_id || 0).toString(),
-                            orderLineId: (bill.order_line_id || 0).toString(),
-                            phone: bill.phone || '',
-                            phone2: bill.phone2 || '',
-                            editBillId: bill.id.toString(),
-                            oldBalance: (bill.old_balance ?? 0).toString(),
-                          }
-                        } as any);
-                      }}
-                      className="w-12 h-12 rounded-2xl bg-white border border-slate-200 items-center justify-center shadow-sm"
-                    >
-                      <Feather name="eye" size={20} color="#64748B" />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={() => handleNavigateToEdit(bill)}
-                      className="w-12 h-12 rounded-2xl bg-white border border-slate-200 items-center justify-center shadow-sm"
-                    >
-                      <Feather name="edit-2" size={20} color="#64748B" />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={() => handlePrintSingleLoadingSheet(bill)}
-                      className="w-12 h-12 rounded-2xl bg-white border border-slate-200 items-center justify-center shadow-sm"
-                    >
-                      <Feather name="file-text" size={20} color="#10B981" />
-                    </TouchableOpacity>
-                  </View>
-
-                  <View className="flex-row items-center gap-3">
-                    <TouchableOpacity onPress={() => handleReject(bill.id)} className="px-2">
-                      <Text className="text-red-500 font-black text-[10px] uppercase tracking-widest">Reject</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={() => handleVerify(bill.id)}
-                      className="px-6 py-4 bg-[#2563EB] rounded-2xl shadow-lg shadow-blue-600/30"
-                    >
-                      <Text className="text-white font-black text-[10px] uppercase tracking-widest font-bold">Verify ✓</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
+                  );
+                })}
               </View>
             ))}
           </View>
         )}
       </ScrollView>
+
+      {/* Loading Sheet Preview Modal */}
+      <Modal
+        visible={isPreviewVisible}
+        animationType="slide"
+        onRequestClose={() => setIsPreviewVisible(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: '#F1F5F9', paddingTop: insets.top }}>
+          <StatusBar style="dark" />
+          
+          {/* Header Bar */}
+          <View className="px-6 pt-2 pb-4 flex-row items-center justify-between border-b border-slate-200 bg-white">
+            <TouchableOpacity
+              onPress={() => setIsPreviewVisible(false)}
+              className="p-2.5 border border-slate-200 rounded-2xl bg-white shadow-sm"
+            >
+              <Feather name="x" size={22} color="#1E293B" />
+            </TouchableOpacity>
+            
+            <Text className="text-xl font-black text-slate-900 italic tracking-tighter text-center flex-1 mx-4" numberOfLines={1}>
+              {previewTitle}
+            </Text>
+            
+            <TouchableOpacity
+              onPress={handleSharePreviewPdf}
+              className="p-2.5 border border-blue-200 rounded-2xl bg-blue-50 shadow-sm flex-row items-center justify-center"
+            >
+              <Feather name="share-2" size={20} color="#2563EB" />
+            </TouchableOpacity>
+          </View>
+
+          {/* WebView Container */}
+          <View className="flex-1 mt-4 mb-6 mx-4">
+            <View className="flex-1 bg-white rounded-[40px] overflow-hidden border border-slate-200 shadow-2xl">
+              {(() => {
+                const isPlayerLoadingSheet = previewTitle.includes('Loading Sheet') && userRole?.toLowerCase() === 'player';
+                if (isPlayerLoadingSheet) {
+                  return (
+                    <View style={{ flex: 1, width: '100%', height: '100%' }}>
+                      {previewHtml ? (
+                        <WebView
+                          originWhitelist={['*']}
+                          source={{ html: previewHtml }}
+                          style={{ flex: 1, backgroundColor: 'white' }}
+                          javaScriptEnabled={true}
+                          domStorageEnabled={true}
+                          scalesPageToFit={false}
+                        />
+                      ) : null}
+                    </View>
+                  );
+                }
+
+                return (
+                  <ScrollView 
+                    className="flex-1"
+                    showsVerticalScrollIndicator={true}
+                    nestedScrollEnabled={true}
+                  >
+                    <ScrollView 
+                      horizontal={true} 
+                      showsHorizontalScrollIndicator={true}
+                      nestedScrollEnabled={true}
+                    >
+                      <View style={{ width: previewTitle.startsWith('Bill Preview') ? 1000 : 900, height: previewTitle.startsWith('Bill Preview') ? 1800 : 2400 }}>
+                        {previewHtml ? (
+                          <WebView
+                            originWhitelist={['*']}
+                            source={{ html: previewHtml }}
+                            style={{ flex: 1, backgroundColor: 'white' }}
+                            javaScriptEnabled={true}
+                            domStorageEnabled={true}
+                            scalesPageToFit={false}
+                            scrollEnabled={false} // Let native ScrollViews handle gestures
+                            overScrollMode="never"
+                          />
+                        ) : null}
+                      </View>
+                    </ScrollView>
+                  </ScrollView>
+                );
+              })()}
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <View style={{ height: insets.bottom, backgroundColor: '#F8FAFC' }} />
     </View>

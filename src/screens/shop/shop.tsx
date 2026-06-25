@@ -422,16 +422,18 @@ export default function ShopListScreen() {
                    {shops.length} Shops
                  </Text>
               </View>
-              <TouchableOpacity
-                  onPress={() => {
-                      setEditingShop(null);
-                      setFormData({ shop_name: '', owner_name: '', shop_owner: '', phone: '', phone2: '', balance: '', without_label_enabled: false });
-                      setShowModal(true);
-                  }}
-                  className="bg-[#10B981] px-3 py-2 rounded-xl shadow-md shadow-emerald-500/20 border-b border-emerald-700"
-              >
-                  <Text className="text-white font-black text-[9px] uppercase tracking-widest">+ Add</Text>
-              </TouchableOpacity>
+              {userRole?.toLowerCase() !== 'viewer' && (
+                <TouchableOpacity
+                    onPress={() => {
+                        setEditingShop(null);
+                        setFormData({ shop_name: '', owner_name: '', shop_owner: '', phone: '', phone2: '', balance: '', without_label_enabled: false });
+                        setShowModal(true);
+                    }}
+                    className="bg-[#10B981] px-3 py-2 rounded-xl shadow-md shadow-emerald-500/20 border-b border-emerald-700"
+                >
+                    <Text className="text-white font-black text-[9px] uppercase tracking-widest">+ Add</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 
@@ -550,6 +552,7 @@ export default function ShopListScreen() {
             <View className={`border rounded-[32px] mb-4 overflow-hidden ${item.has_order_today ? 'bg-emerald-50 border-emerald-100 shadow-none' : 'bg-white border-slate-100 shadow-sm'}`}>
               <TouchableOpacity
                 activeOpacity={0.8}
+                disabled={userRole?.toLowerCase() === 'viewer'}
                 onPress={() => {
                   const isDup = shops.filter(s => s.shop_name.trim().toLowerCase() === item.shop_name.trim().toLowerCase()).length > 1;
                   const resolvedShopName = isDup && item.owner_name ? `${item.shop_name} (${item.owner_name})` : item.shop_name;
@@ -613,16 +616,18 @@ export default function ShopListScreen() {
 
                   {/* Action Buttons */}
                   <View className="flex-row items-center gap-2">
-                      <TouchableOpacity 
-                        onPress={() => {
-                            setSelectedShop(item);
-                            setShowPaymentModal(true);
-                        }}
-                        className="flex-1 bg-emerald-100 border border-emerald-200 py-2.5 rounded-xl flex-row items-center justify-center gap-1.5"
-                      >
-                          <Feather name="plus-circle" size={12} color="#059669" />
-                          <Text className="text-emerald-700 font-black text-[10px] uppercase tracking-widest">Collect</Text>
-                      </TouchableOpacity>
+                      {userRole?.toLowerCase() !== 'viewer' && (
+                          <TouchableOpacity 
+                            onPress={() => {
+                                setSelectedShop(item);
+                                setShowPaymentModal(true);
+                            }}
+                            className="flex-1 bg-emerald-100 border border-emerald-200 py-2.5 rounded-xl flex-row items-center justify-center gap-1.5"
+                          >
+                              <Feather name="plus-circle" size={12} color="#059669" />
+                              <Text className="text-emerald-700 font-black text-[10px] uppercase tracking-widest">Collect</Text>
+                          </TouchableOpacity>
+                      )}
                       <TouchableOpacity 
                         onPress={() => fetchLedger(item)}
                         className="flex-1 bg-indigo-100 border border-indigo-200 py-2.5 rounded-xl flex-row items-center justify-center gap-1.5"
@@ -630,25 +635,27 @@ export default function ShopListScreen() {
                           <Feather name="list" size={12} color="#4F46E5" />
                           <Text className="text-indigo-700 font-black text-[10px] uppercase tracking-widest">Ledger</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity 
-                        onPress={() => {
-                            setEditingShop(item);
-                            setFormData({
-                                shop_name: item.shop_name,
-                                owner_name: item.owner_name || '',
-                                shop_owner: item.shop_owner || '',
-                                phone: item.phone || '',
-                                phone2: item.phone2 || '',
-                                balance: String(item.balance || 0),
-                                without_label_enabled: !!item.without_label_enabled,
-                            });
-                            setShowModal(true);
-                        }}
-                        className="flex-1 bg-blue-100 border border-blue-200 py-2.5 rounded-xl flex-row items-center justify-center gap-1.5"
-                      >
-                          <Feather name="edit-2" size={12} color="#2563EB" />
-                          <Text className="text-blue-700 font-black text-[10px] uppercase tracking-widest">Edit</Text>
-                      </TouchableOpacity>
+                      {userRole?.toLowerCase() !== 'viewer' && (
+                          <TouchableOpacity 
+                            onPress={() => {
+                                setEditingShop(item);
+                                setFormData({
+                                    shop_name: item.shop_name,
+                                    owner_name: item.owner_name || '',
+                                    shop_owner: item.shop_owner || '',
+                                    phone: item.phone || '',
+                                    phone2: item.phone2 || '',
+                                    balance: String(item.balance || 0),
+                                    without_label_enabled: !!item.without_label_enabled,
+                                });
+                                setShowModal(true);
+                            }}
+                            className="flex-1 bg-blue-100 border border-blue-200 py-2.5 rounded-xl flex-row items-center justify-center gap-1.5"
+                          >
+                              <Feather name="edit-2" size={12} color="#2563EB" />
+                              <Text className="text-blue-700 font-black text-[10px] uppercase tracking-widest">Edit</Text>
+                          </TouchableOpacity>
+                      )}
                   </View>
               </View>
             </View>
@@ -667,12 +674,14 @@ export default function ShopListScreen() {
                 <Text className="text-xs font-black text-emerald-500 uppercase tracking-widest mt-1">{selectedShop?.shop_name}</Text>
               </View>
               <View className="flex-row items-center gap-3">
-                <TouchableOpacity 
-                  onPress={() => setShowAdjustModal(true)}
-                  className="px-4 py-2 bg-indigo-600 rounded-xl shadow-lg shadow-indigo-600/20"
-                >
-                  <Text className="text-white font-black text-[10px] uppercase tracking-widest">Adjust</Text>
-                </TouchableOpacity>
+                {userRole?.toLowerCase() !== 'viewer' && (
+                  <TouchableOpacity 
+                    onPress={() => setShowAdjustModal(true)}
+                    className="px-4 py-2 bg-indigo-600 rounded-xl shadow-lg shadow-indigo-600/20"
+                  >
+                    <Text className="text-white font-black text-[10px] uppercase tracking-widest">Adjust</Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity 
                   onPress={() => setShowLedgerModal(false)}
                   className="w-10 h-10 items-center justify-center bg-slate-50 rounded-full"

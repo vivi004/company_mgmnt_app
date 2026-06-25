@@ -49,7 +49,7 @@ function getCategoryForProductId(pid: string, products: Product[]): string {
     return 'OTHER';
 }
 
-export function generateLoadingSheetHTML(bills: Bill[], dateStr: string, vehicleNo: string = ''): string {
+export function generateLoadingSheetHTML(bills: Bill[], dateStr: string, vehicleNo: string = '', isPlayer: boolean = false): string {
     const sortedBills = [...bills].sort((a, b) => a.invoice_no - b.invoice_no);
     const allProducts = getAllProducts();
     const productMap = new Map(allProducts.map(p => [p.id, p]));
@@ -206,25 +206,121 @@ export function generateLoadingSheetHTML(bills: Bill[], dateStr: string, vehicle
 
     let productRows = '';
     groups.forEach(g => {
-        productRows += `<tr><td colspan="6" style="padding:10px 4px 6px 4px;font-weight:bold;font-size:11px;text-transform:uppercase">${g.categoryName}</td></tr>`;
+        if (isPlayer) {
+            productRows += `<tr><td colspan="3" class="category-header">${g.categoryName}</td></tr>`;
+        } else {
+            productRows += `<tr><td colspan="6" style="padding:10px 4px 6px 4px;font-weight:bold;font-size:11px;text-transform:uppercase">${g.categoryName}</td></tr>`;
+        }
+
         g.items.forEach((it, i) => {
             const fmtQty = Number.isInteger(it.qty) ? it.qty.toString() : it.qty.toFixed(2);
-            productRows += `<tr>
-                <td style="${B}text-align:center;font-size:11px;width:30px">${i + 1}</td>
-                <td style="${B}font-size:11px;width:280px">${it.name}</td>
-                <td style="${B}text-align:right;font-size:11px;width:60px">${it.mrp.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td style="${B}text-align:right;font-size:11px;width:100px">${fmtQty} ${it.unit}</td>
-                <td style="${B}text-align:right;font-size:11px;width:80px">${it.rate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td style="${B}text-align:right;font-size:11px;width:100px">${it.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-            </tr>`;
+            if (isPlayer) {
+                productRows += `<tr>
+                    <td style="border-bottom:1px solid #E2E8F0;padding:12px 8px;text-align:center;font-size:13px;width:40px">${i + 1}</td>
+                    <td style="border-bottom:1px solid #E2E8F0;padding:12px 8px;font-size:13px">${it.name}</td>
+                    <td style="border-bottom:1px solid #E2E8F0;padding:12px 8px;text-align:right;font-size:13px;width:120px">${fmtQty} ${it.unit}</td>
+                </tr>`;
+            } else {
+                productRows += `<tr>
+                    <td style="${B}text-align:center;font-size:11px;width:30px">${i + 1}</td>
+                    <td style="${B}font-size:11px;width:280px">${it.name}</td>
+                    <td style="${B}text-align:right;font-size:11px;width:60px">${it.mrp.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td style="${B}text-align:right;font-size:11px;width:100px">${fmtQty} ${it.unit}</td>
+                    <td style="${B}text-align:right;font-size:11px;width:80px">${it.rate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td style="${B}text-align:right;font-size:11px;width:100px">${it.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                </tr>`;
+            }
         });
-        productRows += `<tr>
-            <td colspan="3" style="text-align:right;font-weight:bold;font-size:11px;padding:6px 0">Total :</td>
-            <td style="padding:6px 4px"></td>
-            <td style="padding:6px 0"></td>
-            <td style="text-align:right;font-weight:bold;font-size:11px;padding:6px 4px">${g.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        </tr>`;
+
+        if (isPlayer) {
+            productRows += `<tr class="total-row">
+                <td colspan="2" style="text-align:right;font-weight:bold;font-size:13px;padding:12px 8px;background-color:#F8FAFC;border-top:1px solid #94A3B8;border-bottom:2px solid #0F172A">Total Qty :</td>
+                <td style="text-align:right;font-weight:bold;font-size:13px;padding:12px 8px;background-color:#F8FAFC;border-top:1px solid #94A3B8;border-bottom:2px solid #0F172A">${g.totalQty} ${g.totalUnit}</td>
+            </tr>`;
+        } else {
+            productRows += `<tr>
+                <td colspan="3" style="text-align:right;font-weight:bold;font-size:11px;padding:6px 0">Total :</td>
+                <td style="padding:6px 4px"></td>
+                <td style="padding:6px 0"></td>
+                <td style="text-align:right;font-weight:bold;font-size:11px;padding:6px 4px">${g.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            </tr>`;
+        }
     });
+
+    if (isPlayer) {
+        return `<html><head><title>Loading Sheet – ${displayDate}</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            *{margin:0;padding:0;box-sizing:border-box}
+            body{
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                padding: 16px;
+                color: #1E293B;
+                background: #fff;
+            }
+            h2 {
+                font-size: 20px;
+                font-weight: 800;
+                color: #0F172A;
+                text-align: center;
+                margin-bottom: 12px;
+                font-style: italic;
+            }
+            .meta-table {
+                width: 100%;
+                margin-bottom: 16px;
+                border-bottom: 2px solid #E2E8F0;
+                padding-bottom: 12px;
+                border-collapse: collapse;
+            }
+            .meta-table td {
+                font-size: 13px;
+                color: #64748B;
+                padding: 4px 0;
+            }
+            .loading-table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            .category-header {
+                font-size: 13px;
+                font-weight: 800;
+                color: #2563EB;
+                padding: 16px 8px 8px 8px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                background-color: #F8FAFC;
+                border-bottom: 1px solid #E2E8F0;
+            }
+            .loading-table th {
+                font-size: 11px;
+                font-weight: 800;
+                color: #475569;
+                text-transform: uppercase;
+                border-bottom: 2px solid #CBD5E1;
+                padding: 10px 8px;
+            }
+        </style></head><body>
+        <h2>New Loading Sheet</h2>
+        <table class="meta-table">
+            <tr>
+                <td style="font-weight:bold;color:#0F172A">Stock Group: Primary<br>Vehicle No: <span style="text-transform:uppercase">${vehicleNo || '-'}</span></td>
+                <td style="text-align:right;font-weight:bold;color:#0F172A;vertical-align:top">For ${displayDate}</td>
+            </tr>
+        </table>
+
+        <table class="loading-table">
+            <thead>
+                <tr>
+                    <th style="text-align:center;width:40px">S.No</th>
+                    <th style="text-align:left">Particulars</th>
+                    <th style="text-align:right;width:120px">Quantity</th>
+                </tr>
+            </thead>
+            <tbody>${productRows}</tbody>
+        </table>
+        </body></html>`;
+    }
 
     let shopRows = '';
     shopLines.forEach(sl => {

@@ -35,6 +35,7 @@ const TodayCollectionScreen = () => {
     const insets = useSafeAreaInsets();
     const [orderLines, setOrderLines] = useState<any[]>([]);
     const [loadingOls, setLoadingOls] = useState(true);
+    const [isViewer, setIsViewer] = useState(false);
 
     const [keyboardHeight, setKeyboardHeight] = useState(0);
 
@@ -279,6 +280,11 @@ const TodayCollectionScreen = () => {
             try {
                 const allOls = await fetchOrderLines();
                 const userData = await getUserData();
+                const userRole = await AsyncStorage.getItem('userRole');
+                // Detect Viewer role
+                if (userRole && userRole.toLowerCase() === 'viewer') {
+                    setIsViewer(true);
+                }
                 let filteredOls = allOls;
 
                 if (userData && userData.accessible_orderlines) {
@@ -688,6 +694,7 @@ const TodayCollectionScreen = () => {
                                     </View>
                                 </View>
 
+                                {!isViewer ? (
                                 <View className="flex-row gap-2">
                                     <TouchableOpacity 
                                         onPress={() => { setSelectedShop(row); setShowPaymentModal(true); }}
@@ -714,6 +721,16 @@ const TodayCollectionScreen = () => {
                                         <Text className="text-white font-black text-[9px] uppercase tracking-tighter">Ledger 👁</Text>
                                     </TouchableOpacity>
                                 </View>
+                                ) : (
+                                <View className="flex-row gap-2">
+                                    <TouchableOpacity 
+                                        onPress={() => fetchLedger(row)}
+                                        className="flex-1 bg-indigo-500 py-2.5 rounded-xl items-center shadow-sm"
+                                    >
+                                        <Text className="text-white font-black text-[9px] uppercase tracking-tighter">Ledger 👁</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                )}
                             </View>
                         );
                     })
@@ -761,6 +778,7 @@ const TodayCollectionScreen = () => {
                             </View>
                             <View className="flex-row items-center gap-3">
                                 <Text className="text-sm font-black text-amber-600">-₹{fmt(exp.amount)}</Text>
+                                {!isViewer && (
                                 <View className="flex-row items-center gap-1.5">
                                     <TouchableOpacity 
                                         onPress={() => handleOpenEditExpense(exp)}
@@ -775,6 +793,7 @@ const TodayCollectionScreen = () => {
                                         <Feather name="trash-2" size={10} color="#ef4444" />
                                     </TouchableOpacity>
                                 </View>
+                                )}
                             </View>
                         </View>
                     ))}
@@ -876,6 +895,7 @@ const TodayCollectionScreen = () => {
             </Modal>
 
             {/* --- Add Expense Floating Button --- */}
+            {!isViewer && (
             <View
                 style={{
                     position: 'absolute',
@@ -901,6 +921,7 @@ const TodayCollectionScreen = () => {
                     <Ionicons name="add" size={30} color="white" />
                 </TouchableOpacity>
             </View>
+            )}
             {/* Ledger Modal */}
             <Modal visible={showLedgerModal} animationType="fade" transparent statusBarTranslucent={true}>
                 <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.8)' }}>
