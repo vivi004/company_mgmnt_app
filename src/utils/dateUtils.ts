@@ -26,20 +26,26 @@ export const parseIST = (dateStr: any): Date => {
 };
 
 export const formatIST = (date: Date | string, options: Intl.DateTimeFormatOptions = {}): string => {
-    const d = typeof date === 'string' ? parseIST(date) : date;
-    
-    const defaultOptions: Intl.DateTimeFormatOptions = {
-        timeZone: 'Asia/Kolkata',
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-        ...options
-    };
+    try {
+        if (!date) return 'N/A';
+        const d = typeof date === 'string' ? parseIST(date) : date;
+        if (!d || isNaN(d.getTime())) return 'INVALID DATE';
+        
+        const defaultOptions: Intl.DateTimeFormatOptions = {
+            timeZone: 'Asia/Kolkata',
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+            ...options
+        };
 
-    return d.toLocaleString('en-IN', defaultOptions).toUpperCase();
+        return d.toLocaleString('en-IN', defaultOptions).toUpperCase();
+    } catch (e) {
+        return 'INVALID DATE';
+    }
 };
 
 export const getTodayIST = (): string => {
@@ -48,6 +54,12 @@ export const getTodayIST = (): string => {
 };
 
 export const toUTCISO = (date: Date | string): string => {
-    const d = typeof date === 'string' ? new Date(date) : date;
-    return d.toISOString();
+    try {
+        if (!date) return new Date().toISOString();
+        const d = typeof date === 'string' ? new Date(date) : date;
+        if (!d || isNaN(d.getTime())) return new Date().toISOString();
+        return d.toISOString();
+    } catch {
+        return new Date().toISOString();
+    }
 };

@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, FlatList,
   ActivityIndicator, RefreshControl
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { DrawerActions } from '@react-navigation/native';
+import { DrawerActions, useFocusEffect } from '@react-navigation/native';
 import { useRouter, useNavigation } from 'expo-router';
 import { fetchOrderLines, OrderLine } from '../../services/shopService';
 import { getUserData } from '../../services/authService';
@@ -18,9 +18,11 @@ export default function OrderLines() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    loadOrderLines();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadOrderLines();
+    }, [])
+  );
 
   const loadOrderLines = async () => {
     setLoading(true);

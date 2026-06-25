@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
     fetchCollectionsByOrderLine, 
     fetchOrderLines, 
@@ -19,20 +19,7 @@ export const useCollections = (orderLines: any[]) => {
     const [expenses, setExpenses] = useState<Expense[]>([]);
     const [loading, setLoading] = useState(false);
 
-    // Auto-select first order line when orderLines load
-    useEffect(() => {
-        if (orderLines.length > 0 && selectedOlId === null) {
-            setSelectedOlId(orderLines[0].id);
-        }
-    }, [orderLines, selectedOlId]);
-
-    // Fetch collections when date or order line changes
-    useEffect(() => {
-        if (!selectedOlId || !selectedDate) return;
-        fetchCollections();
-    }, [selectedOlId, selectedDate]);
-
-    const fetchCollections = async (silent = false) => {
+    const fetchCollections = useCallback(async (silent = false) => {
         if (!selectedOlId || !selectedDate) return;
         if (!silent) setLoading(true);
         try {
@@ -53,7 +40,20 @@ export const useCollections = (orderLines: any[]) => {
         } finally {
             if (!silent) setLoading(false);
         }
-    };
+    }, [selectedOlId, selectedDate]);
+
+    // Auto-select first order line when orderLines load
+    useEffect(() => {
+        if (orderLines.length > 0 && selectedOlId === null) {
+            setSelectedOlId(orderLines[0].id);
+        }
+    }, [orderLines, selectedOlId]);
+
+    // Fetch collections when date or order line changes
+    useEffect(() => {
+        if (!selectedOlId || !selectedDate) return;
+        fetchCollections();
+    }, [selectedOlId, selectedDate, fetchCollections]);
 
     const collectPayment = async (shopId: number, amount: number, method: string, description: string, userName: string) => {
         const originalCollections = [...collections];

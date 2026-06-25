@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import { DrawerActions } from '@react-navigation/native';
+import { DrawerActions, useFocusEffect } from '@react-navigation/native';
 import { useNavigation } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as collectionService from '../../services/collectionService';
@@ -88,6 +88,14 @@ export default function CollectionsScreen() {
       loadCollections(selectedOlId, selectedDate);
     }
   }, [selectedOlId, selectedDate, loadCollections]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (selectedOlId) {
+        loadCollections(selectedOlId, selectedDate);
+      }
+    }, [selectedOlId, selectedDate, loadCollections])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

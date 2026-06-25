@@ -20,7 +20,7 @@ import { RouteSortModal } from '../../../components/shop/RouteSortModal';
 import { FontAwesome, MaterialIcons, Ionicons, Feather } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from 'expo-router';
-import { DrawerActions } from '@react-navigation/native';
+import { DrawerActions, useFocusEffect } from '@react-navigation/native';
 import { fetchOrderLines, addExpense, fetchOverallReturns } from '../../../services/collectionService';
 import { fetchShopLedger } from '../../../services/shopService';
 import { getUserData } from '../../../services/authService';
@@ -275,65 +275,72 @@ const TodayCollectionScreen = () => {
         );
     };
 
-    useEffect(() => {
-        const loadInitialData = async () => {
-            try {
-                const allOls = await fetchOrderLines();
-                const userData = await getUserData();
-                const userRole = await AsyncStorage.getItem('userRole');
-                // Detect Viewer role
-                if (userRole && userRole.toLowerCase() === 'viewer') {
-                    setIsViewer(true);
-                }
-                let filteredOls = allOls;
-
-                if (userData && userData.accessible_orderlines) {
-                    let authorizedIds: number[] = [];
-                    const raw = userData.accessible_orderlines;
-
-                    if (typeof raw === 'string') {
-                        try {
-                            authorizedIds = JSON.parse(raw);
-                        } catch (e) {
-                            authorizedIds = raw.split(',').map((id: string) => parseInt(id.trim())).filter((id: number) => !isNaN(id));
-                        }
-                    } else if (Array.isArray(raw)) {
-                        authorizedIds = raw;
-                    }
-
-                    if (authorizedIds.length > 0) {
-                        filteredOls = allOls.filter((ol: any) => authorizedIds.includes(ol.id));
-                    }
-                }
-
-                // Apply custom order line sorting if saved in AsyncStorage
-                try {
-                    const storedOrder = await AsyncStorage.getItem('customOrderLineSort');
-                    if (storedOrder) {
-                        const parsedIds: number[] = JSON.parse(storedOrder);
-                        filteredOls.sort((a: any, b: any) => {
-                            const idxA = parsedIds.indexOf(a.id);
-                            const idxB = parsedIds.indexOf(b.id);
-                            if (idxA === -1 && idxB === -1) return 0;
-                            if (idxA === -1) return 1;
-                            if (idxB === -1) return -1;
-                            return idxA - idxB;
-                        });
-                    }
-                } catch (e) {
-                    console.error('Failed to parse customOrderLineSort:', e);
-                }
-
-                setOrderLines(filteredOls);
-            } catch (error) {
-                console.error('Failed to load order lines:', error);
-            } finally {
-                setLoadingOls(false);
+    const loadInitialData = useCallback(async () => {
+        try {
+            const allOls = await fetchOrderLines();
+            const userData = await getUserData();
+            const userRole = await AsyncStorage.getItem('userRole');
+            // Detect Viewer role
+            if (userRole && userRole.toLowerCase() === 'viewer') {
+                setIsViewer(true);
             }
-        };
+            let filteredOls = allOls;
 
-        loadInitialData();
+            if (userData && userData.accessible_orderlines) {
+                let authorizedIds: number[] = [];
+                const raw = userData.accessible_orderlines;
+
+                if (typeof raw === 'string') {
+                    try {
+                        authorizedIds = JSON.parse(raw);
+                    } catch (e) {
+                        authorizedIds = raw.split(',').map((id: string) => parseInt(id.trim())).filter((id: number) => !isNaN(id));
+                    }
+                } else if (Array.isArray(raw)) {
+                    authorizedIds = raw;
+                }
+
+                if (authorizedIds.length > 0) {
+                    filteredOls = allOls.filter((ol: any) => authorizedIds.includes(ol.id));
+                }
+            }
+
+            // Apply custom order line sorting if saved in AsyncStorage
+            try {
+                const storedOrder = await AsyncStorage.getItem('customOrderLineSort');
+                if (storedOrder) {
+                    const parsedIds: number[] = JSON.parse(storedOrder);
+                    filteredOls.sort((a: any, b: any) => {
+                        const idxA = parsedIds.indexOf(a.id);
+                        const idxB = parsedIds.indexOf(b.id);
+                        if (idxA === -1 && idxB === -1) return 0;
+                        if (idxA === -1) return 1;
+                        if (idxB === -1) return -1;
+                        return idxA - idxB;
+                    });
+                }
+            } catch (e) {
+                console.error('Failed to parse customOrderLineSort:', e);
+            }
+
+            setOrderLines(filteredOls);
+        } catch (error) {
+            console.error('Failed to load order lines:', error);
+        } finally {
+            setLoadingOls(false);
+        }
     }, []);
+
+    useEffect(() => {
+        loadInitialData();
+    }, [loadInitialData]);
+
+    useFocusEffect(
+        useCallback(() => {
+            loadInitialData();
+            refresh(true);
+        }, [loadInitialData, refresh])
+    );
 
     const onDateChange = (event: any, date?: Date) => {
         setShowDatePicker(false);
