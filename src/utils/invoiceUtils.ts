@@ -191,8 +191,7 @@ export const generateInvoiceHTML = (data: InvoiceData, vehicleNo: string = '') =
         Edappadi[Tk],Salem[dt].<br>
         FSSAI NO:12417018000626.<br>
         State Name : Tamil Nadu, Code : 33<br>
-        Contact : 9965174472<br>
-        E-Mail : nishaoilmills.pvt.ltd@gmail.com
+        Contact : 9965174472
     </td>
     <td colspan="2" style="${B}font-size:10px;">Invoice No.<br><b style="font-size:11px;">${data.invoiceNo}</b></td>
     <td colspan="2" style="${B}font-size:10px;">Dated<br><b style="font-size:11px;">${dds}</b></td>
