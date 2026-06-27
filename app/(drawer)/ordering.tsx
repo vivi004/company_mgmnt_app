@@ -475,7 +475,8 @@ const ProductCard = memo(({ product, cart, customPrices, updateQuantity, setAbso
     customPrices[product.id] !== undefined ? String(getDisplayPrice(customPrices[product.id])) : String(getDisplayPrice(product.price))
   );
 
-  const qty = cart[product.id] || 0;
+  const qtyKey = isWlCategory ? `${product.id}_wl` : product.id;
+  const qty = cart[qtyKey] || 0;
 
   // Sync local states when external values change
   useEffect(() => {
@@ -532,17 +533,19 @@ const ProductCard = memo(({ product, cart, customPrices, updateQuantity, setAbso
         return null;
       };
 
-      if (isWlCategory) {
-        return getSingleControls('_box_wl', ['1 litre', '1 ltr', '1 ltr-pet', '2 ltr'].includes(size) ? '_wl' : '_ltr_wl');
-      }
+      const controls = isWlCategory
+        ? getSingleControls('_box_wl', ['1 litre', '1 ltr', '1 ltr-pet', '2 ltr'].includes(size) ? '_wl' : '_ltr_wl')
+        : getSingleControls('_box', ['1 litre', '1 ltr', '1 ltr-pet', '2 ltr'].includes(size) ? '' : '_ltr');
 
-      return getSingleControls('_box', ['1 litre', '1 ltr', '1 ltr-pet', '2 ltr'].includes(size) ? '' : '_ltr');
+      if (controls) {
+        return controls;
+      }
     }
 
     return (
       <View className={`flex-row items-center rounded-3xl p-1.5 mt-3 w-full border shadow-inner ${isWlCategory ? 'bg-amber-100/50 border-amber-200' : 'bg-blue-100/50 border-blue-200'}`}>
         <RepeatableButton
-          onPress={() => updateQuantity(product.id, -1)}
+          onPress={() => updateQuantity(qtyKey, -1)}
           disabled={qty === 0}
           className="p-4 rounded-2xl bg-white shadow-sm border border-slate-100"
         >
@@ -551,12 +554,12 @@ const ProductCard = memo(({ product, cart, customPrices, updateQuantity, setAbso
         <TextInput
           value={localQty ?? String(qty)}
           keyboardType="numeric"
-          onChangeText={(val) => handleTextChange(product.id, val)}
+          onChangeText={(val) => handleTextChange(qtyKey, val)}
           selectTextOnFocus={true}
           className={`flex-1 text-center font-black text-2xl py-2 ${isWlCategory ? 'text-amber-900' : 'text-blue-900'}`}
         />
         <RepeatableButton
-          onPress={() => updateQuantity(product.id, 1)}
+          onPress={() => updateQuantity(qtyKey, 1)}
           className={`p-4 rounded-2xl shadow-md border ${isWlCategory ? 'bg-amber-500 border-amber-600' : 'bg-blue-600 border-blue-500'}`}
         >
           <Feather name="plus" size={20} color="white" />

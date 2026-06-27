@@ -55,7 +55,6 @@ export const useShopActions = (
                 });
                 if (onSuccess) onSuccess();
             }
-            Alert.alert('Success', 'Balance adjusted!');
         } catch (err: any) {
             Alert.alert('Error', err.message || 'Failed to adjust balance');
         } finally {
@@ -121,7 +120,6 @@ export const useShopActions = (
                 });
                 if (onSuccess) onSuccess();
             }
-            Alert.alert('Success', 'Payment recorded!');
         } catch (err: any) {
             Alert.alert('Error', err.message || 'Failed to record payment');
         } finally {

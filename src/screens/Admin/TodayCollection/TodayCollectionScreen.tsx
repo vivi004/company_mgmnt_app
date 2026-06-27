@@ -113,7 +113,6 @@ const TodayCollectionScreen = () => {
 
         try {
             await recordProductReturn(shopId, prodName, amount);
-            Alert.alert('Success', 'Product return recorded successfully');
         } catch (err: any) {
             Alert.alert('Error', err.message || 'Failed to record product return');
         } finally {
