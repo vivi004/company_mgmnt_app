@@ -21,6 +21,7 @@ import { EncodingType } from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { generateInvoiceHTML } from '../../utils/invoiceUtils';
 import { fetchCollectionsByOrderLine } from '../../services/collectionService';
+import { getAllProducts } from '../../services/productService';
 
 const BILL_CONTAINER_WIDTH = 1000;
 const BILL_CONTAINER_HEIGHT = 1600; // Large height to avoid WebView internal scrolling issues
@@ -44,6 +45,8 @@ export default function InvoiceScreen() {
     specificArea?: string;
     editBillId: string;
     oldBalance?: string;
+    initialCart?: string;
+    initialDeliveryDate?: string;
   }>();
 
   const [upiSettings, setUpiSettings] = useState({
@@ -110,8 +113,58 @@ export default function InvoiceScreen() {
     phone: params.phone || '',
     phone2: params.phone2 || '',
     oldBalance,
+    initialCart: params.initialCart || '',
+    initialDeliveryDate: params.initialDeliveryDate || '',
     ...upiSettings
   }), [params, upiSettings, oldBalance]);
+
+  const isEditedPrice = useMemo(() => {
+    try {
+      const customRates = JSON.parse(params.customRates || '{}');
+      const cart = JSON.parse(params.cart || '{}');
+      const allProducts = getAllProducts();
+      const productMap = new Map(allProducts.map(p => [p.id, p]));
+      
+      return Object.keys(cart).some(pid => {
+        const cleanPid = pid.replace(/_wl$/, '').replace(/_box_wl$/, '_box').replace(/_ltr_wl$/, '_ltr');
+        const p = productMap.get(cleanPid);
+        if (!p) return false;
+        const basePid = cleanPid.replace(/_box$|_ltr$/, '');
+        const customRate = customRates[pid] ?? customRates[cleanPid] ?? customRates[basePid];
+        return customRate !== undefined && customRate !== p.price;
+      });
+    } catch {
+      return false;
+    }
+  }, [params.cart, params.customRates]);
+
+  const isEditedQty = useMemo(() => {
+    try {
+      if (!params.initialCart) return false;
+      const initCart = JSON.parse(params.initialCart);
+      const cart = JSON.parse(params.cart || '{}');
+      const finalKeys = Object.keys(cart).filter(k => cart[k] > 0);
+      const initKeys = Object.keys(initCart).filter(k => initCart[k] > 0);
+      
+      if (finalKeys.length !== initKeys.length) return true;
+      return finalKeys.some(k => cart[k] !== initCart[k]);
+    } catch {
+      return false;
+    }
+  }, [params.cart, params.initialCart]);
+
+  const isEditedDate = useMemo(() => {
+    try {
+      if (!params.initialDeliveryDate || !params.deliveryDate) return false;
+      const initDate = new Date(params.initialDeliveryDate);
+      const deliveryDate = new Date(params.deliveryDate);
+      const initStr = [initDate.getFullYear(), String(initDate.getMonth() + 1).padStart(2, '0'), String(initDate.getDate()).padStart(2, '0')].join('-');
+      const delivStr = [deliveryDate.getFullYear(), String(deliveryDate.getMonth() + 1).padStart(2, '0'), String(deliveryDate.getDate()).padStart(2, '0')].join('-');
+      return initStr !== delivStr;
+    } catch {
+      return false;
+    }
+  }, [params.deliveryDate, params.initialDeliveryDate]);
 
   const htmlContent = useMemo(() => generateInvoiceHTML(invoiceData), [invoiceData]);
   const webViewRef = useRef<WebView>(null);
@@ -216,10 +269,31 @@ export default function InvoiceScreen() {
           <Feather name="check-circle" size={22} color="white" />
         </View>
         <View className="flex-1">
-          <Text className="text-white font-black text-sm tracking-tight">Order Placed Successfully!</Text>
+          <View className="flex-row items-center justify-between">
+            <Text className="text-white font-black text-sm tracking-tight">Order Placed Successfully!</Text>
+          </View>
           <Text className="text-emerald-100 text-[11px] font-bold mt-0.5">
             {invoiceData.shopName} • Invoice #{invoiceData.invoiceNo}
           </Text>
+          {(isEditedPrice || isEditedQty || isEditedDate) && (
+            <View className="flex-row flex-wrap items-center gap-1.5 mt-1.5">
+              {isEditedPrice && (
+                <View className="bg-red-600 border border-red-700 px-1.5 py-0.5 rounded-md">
+                  <Text className="text-white text-[8px] font-black uppercase tracking-wider">Edited Price</Text>
+                </View>
+              )}
+              {isEditedQty && (
+                <View className="bg-amber-600 border border-amber-700 px-1.5 py-0.5 rounded-md">
+                  <Text className="text-white text-[8px] font-black uppercase tracking-wider">Edited Qty</Text>
+                </View>
+              )}
+              {isEditedDate && (
+                <View className="bg-blue-600 border border-blue-700 px-1.5 py-0.5 rounded-md">
+                  <Text className="text-white text-[8px] font-black uppercase tracking-wider">Edited Date</Text>
+                </View>
+              )}
+            </View>
+          )}
         </View>
       </View>
 

@@ -80,7 +80,7 @@ function RepeatableButton({
 export default function OrderingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { shopId, shopName, orderLineId, villageName, areaName, specificArea, editBillId, initialCart, initialCustomPrices, phone, phone2, invoiceNo, withoutLabelEnabled } = useLocalSearchParams<{
+  const { shopId, shopName, orderLineId, villageName, areaName, specificArea, editBillId, initialCart, initialCustomPrices, phone, phone2, invoiceNo, withoutLabelEnabled, initialDeliveryDate, initialIsEditedPrice, initialIsEditedQty, initialIsEditedDate } = useLocalSearchParams<{
     shopId: string;
     shopName: string;
     orderLineId: string;
@@ -94,6 +94,10 @@ export default function OrderingScreen() {
     phone2?: string;
     invoiceNo?: string;
     withoutLabelEnabled?: string;
+    initialDeliveryDate?: string;
+    initialIsEditedPrice?: string;
+    initialIsEditedQty?: string;
+    initialIsEditedDate?: string;
   }>();
 
   const [activeCatId, setActiveCatId] = useState(SHOP_CATEGORIES[0].id);
@@ -414,7 +418,12 @@ export default function OrderingScreen() {
                 phone,
                 phone2,
                 invoiceNo,
-                withoutLabelEnabled
+                withoutLabelEnabled,
+                initialCart,
+                initialDeliveryDate,
+                initialIsEditedPrice,
+                initialIsEditedQty,
+                initialIsEditedDate,
               }
             } as any)}
             className="w-full bg-blue-600 flex-row items-center justify-between p-4 rounded-[32px] shadow-2xl border border-white/20"

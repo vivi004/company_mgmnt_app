@@ -23,6 +23,8 @@ export interface Bill {
   order_line_id?: number;
   shop_id?: number;
   is_edited_price?: boolean;
+  is_edited_qty?: boolean;
+  is_edited_date?: boolean;
   old_balance?: number;
   oldBalance?: number;
 }

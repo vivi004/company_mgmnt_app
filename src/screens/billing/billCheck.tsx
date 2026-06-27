@@ -216,6 +216,10 @@ export default function BillCheckScreen() {
         phone: bill.phone || '',
         phone2: bill.phone2 || '',
         invoiceNo: bill.invoice_no.toString(),
+        initialDeliveryDate: bill.delivery_date || bill.bill_date || '',
+        initialIsEditedPrice: String(bill.is_edited_price || false),
+        initialIsEditedQty: String(bill.is_edited_qty || false),
+        initialIsEditedDate: String(bill.is_edited_date || false),
       }
     } as any);
   };
@@ -441,6 +445,16 @@ export default function BillCheckScreen() {
                         {bill.is_edited_price ? (
                           <View className="px-2 py-1 bg-red-100/50 rounded-lg border border-red-200">
                             <Text className="text-[10px] font-black text-red-600 uppercase tracking-widest">Edited Price</Text>
+                          </View>
+                        ) : null}
+                        {bill.is_edited_qty ? (
+                          <View className="px-2 py-1 bg-amber-100/50 rounded-lg border border-amber-200">
+                            <Text className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Edited Qty</Text>
+                          </View>
+                        ) : null}
+                        {bill.is_edited_date ? (
+                          <View className="px-2 py-1 bg-blue-100/50 rounded-lg border border-blue-200">
+                            <Text className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Edited Date</Text>
                           </View>
                         ) : null}
                       </View>

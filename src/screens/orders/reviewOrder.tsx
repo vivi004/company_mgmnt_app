@@ -150,6 +150,11 @@ export default function ReviewOrder() {
     phone?: string;
     phone2?: string;
     invoiceNo?: string;
+    initialCart?: string;
+    initialDeliveryDate?: string;
+    initialIsEditedPrice?: string;
+    initialIsEditedQty?: string;
+    initialIsEditedDate?: string;
   }>();
 
   const [cart, setCart] = useState<Record<string, number>>(() => {
@@ -181,6 +186,10 @@ export default function ReviewOrder() {
   const [ratesRevision, setRatesRevision] = useState(0);
   
   const [deliveryDate, setDeliveryDate] = useState(() => {
+    if (params.initialDeliveryDate) {
+      const d = new Date(params.initialDeliveryDate);
+      if (!isNaN(d.getTime())) return d;
+    }
     const d = new Date();
     d.setDate(d.getDate() + 1); // default to tomorrow
     return d;
@@ -270,6 +279,47 @@ export default function ReviewOrder() {
           }
       });
 
+      let hasEditedQty = false;
+      let hasEditedDate = false;
+
+      if (params.editBillId) {
+        if (params.initialCart) {
+          try {
+            const initCart: Record<string, number> = JSON.parse(params.initialCart);
+            const finalKeys = Object.keys(cart).filter(k => cart[k] > 0);
+            const initKeys = Object.keys(initCart).filter(k => initCart[k] > 0);
+            
+            if (finalKeys.length !== initKeys.length) {
+              hasEditedQty = true;
+            } else {
+              hasEditedQty = finalKeys.some(k => cart[k] !== initCart[k]);
+            }
+          } catch (e) {
+            console.error("Error parsing initialCart:", e);
+          }
+        }
+        if (params.initialDeliveryDate) {
+          try {
+            const initDate = new Date(params.initialDeliveryDate);
+            const initDateStr = [
+              initDate.getFullYear(),
+              String(initDate.getMonth() + 1).padStart(2, '0'),
+              String(initDate.getDate()).padStart(2, '0')
+            ].join('-');
+            
+            if (initDateStr !== deliveryDateStr) {
+              hasEditedDate = true;
+            }
+          } catch (e) {
+            console.error("Error parsing initialDeliveryDate:", e);
+          }
+        }
+      }
+
+      const isEditedPriceFinal = hasEditedPrice || params.initialIsEditedPrice === 'true';
+      const isEditedQtyFinal = hasEditedQty || params.initialIsEditedQty === 'true';
+      const isEditedDateFinal = hasEditedDate || params.initialIsEditedDate === 'true';
+
       if (params.editBillId) {
         // UPDATE EXISTING BILL
         await billService.updateBill(Number(params.editBillId), { 
@@ -277,7 +327,9 @@ export default function ReviewOrder() {
           custom_rates: finalCustomRates,
           total_amount: totalPrice,
           delivery_date: deliveryDateStr,
-          is_edited_price: hasEditedPrice
+          is_edited_price: isEditedPriceFinal,
+          is_edited_qty: isEditedQtyFinal,
+          is_edited_date: isEditedDateFinal
         });
         
         Alert.alert('Updated!', 'Invoice updated successfully.', [
@@ -300,6 +352,8 @@ export default function ReviewOrder() {
                 phone: params.phone || '',
                 phone2: params.phone2 || '',
                 editBillId: params.editBillId,
+                initialCart: params.initialCart || '',
+                initialDeliveryDate: params.initialDeliveryDate || '',
               }
             } as any)
           }
@@ -316,7 +370,9 @@ export default function ReviewOrder() {
           delivery_date: deliveryDateStr,
           created_by: user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : (user?.username || 'Mobile App'),
           total_amount: totalPrice,
-          is_edited_price: hasEditedPrice
+          is_edited_price: hasEditedPrice,
+          is_edited_qty: false,
+          is_edited_date: false
         };
 
         const result = await billService.submitBill(billData);
@@ -339,6 +395,8 @@ export default function ReviewOrder() {
             deliveryDate: billData.delivery_date,
             invoiceNo: result.invoice_no.toString(),
             editBillId: result.id.toString(),
+            initialCart: '',
+            initialDeliveryDate: '',
           }
         } as any);
       }

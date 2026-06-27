@@ -1,4 +1,4 @@
-import { getCartItems, Product } from '../services/productService';
+import { getCartItems, Product, getAllProducts } from '../services/productService';
 import { formatIST } from './dateUtils';
 import * as qrcodeModule from 'qrcode-generator';
 
@@ -84,6 +84,8 @@ export interface InvoiceData {
     upiName2?: string;
     oldBalance?: number;
     old_balance?: number;
+    initialCart?: string;
+    initialDeliveryDate?: string;
 }
 
 export const generateInvoiceHTML = (data: InvoiceData, vehicleNo: string = '') => {
@@ -94,6 +96,10 @@ export const generateInvoiceHTML = (data: InvoiceData, vehicleNo: string = '') =
 
     const upiLink1 = `upi://pay?pa=${upiId1}&pn=${encodeURIComponent(upiName1)}&cu=INR`;
     const upiLink2 = `upi://pay?pa=${upiId2}&pn=${encodeURIComponent(upiName2)}&cu=INR`;
+    
+    const allProducts = getAllProducts();
+    const productMap = new Map(allProducts.map(p => [p.id, p]));
+
     const items = getCartItems(data.cart, data.customRates).map(it => {
         const isLtrVariant = it.id.endsWith('_ltr') || it.id.endsWith('_ltr_wl');
         const sizeLower = it.size.toLowerCase();
@@ -111,6 +117,49 @@ export const generateInvoiceHTML = (data: InvoiceData, vehicleNo: string = '') =
         }
         return it;
     });
+
+    let initCart: Record<string, number> = {};
+    if (data.initialCart) {
+        try {
+            initCart = JSON.parse(data.initialCart);
+        } catch (e) {
+            try {
+                if (typeof data.initialCart === 'object') {
+                    initCart = data.initialCart as any;
+                }
+            } catch (err) {}
+        }
+    }
+
+    let isDateEdited = false;
+    if (data.initialDeliveryDate && data.deliveryDate) {
+        try {
+            const initD = new Date(data.initialDeliveryDate);
+            const delivD = new Date(data.deliveryDate);
+            const initStr = [initD.getFullYear(), String(initD.getMonth() + 1).padStart(2, '0'), String(initD.getDate()).padStart(2, '0')].join('-');
+            const delivStr = [delivD.getFullYear(), String(delivD.getMonth() + 1).padStart(2, '0'), String(delivD.getDate()).padStart(2, '0')].join('-');
+            isDateEdited = initStr !== delivStr;
+        } catch (e) {}
+    }
+
+    const hasAnyQtyEdited = data.initialCart ? (() => {
+        try {
+            const finalKeys = Object.keys(data.cart).filter(k => data.cart[k] > 0);
+            const initKeys = Object.keys(initCart).filter(k => initCart[k] > 0);
+            if (finalKeys.length !== initKeys.length) return true;
+            return finalKeys.some(k => data.cart[k] !== initCart[k]);
+        } catch {
+            return false;
+        }
+    })() : false;
+
+    const hasAnyEdited = items.some(it => {
+        const cleanPid = it.id.replace(/_wl$/, '').replace(/_box_wl$/, '_box').replace(/_ltr_wl$/, '_ltr');
+        const basePid = cleanPid.replace(/_box$|_ltr$/, '');
+        const baseProduct = productMap.get(basePid);
+        return !!(baseProduct && data.customRates && data.customRates[basePid] !== undefined && data.customRates[basePid] !== baseProduct.price);
+    });
+
     const totalQty = items.reduce((a, i) => a + i.quantity, 0);
     const totalAmt = items.reduce((a, i) => a + i.price * i.quantity, 0);
     const oldBalVal = Number(data.oldBalance ?? data.old_balance ?? 0);
@@ -157,9 +206,27 @@ export const generateInvoiceHTML = (data: InvoiceData, vehicleNo: string = '') =
         else if (/\b(100|200|500)\s*ML\b/i.test(description)) u = 'PCS';
         else if (u === 'LITRE') u = 'PCS';
 
+        const cleanPid = it.id.replace(/_wl$/, '').replace(/_box_wl$/, '_box').replace(/_ltr_wl$/, '_ltr');
+        const basePid = cleanPid.replace(/_box$|_ltr$/, '');
+        const baseProduct = productMap.get(basePid);
+        const isPriceEdited = !!(baseProduct && data.customRates && data.customRates[basePid] !== undefined && data.customRates[basePid] !== baseProduct.price);
+
+        let isQtyEdited = false;
+        if (data.initialCart) {
+            const finalQty = data.cart[it.id] || 0;
+            const initQty = initCart[it.id] || 0;
+            if (finalQty !== initQty) {
+                isQtyEdited = true;
+            }
+        }
+
         return `<tr>
     <td style="${LR}text-align:center;">${i + 1}</td>
-    <td style="${LR}font-weight:bold;">${description}</td>
+    <td style="${LR}font-weight:bold;">
+        ${description}
+        ${isPriceEdited ? `<br><span style="font-size:8px;color:#dc2626;font-weight:bold;background-color:#fee2e2;border:1px solid #fecaca;padding:1px 3px;border-radius:3px;display:inline-block;margin-top:2px;letter-spacing:0.5px;">EDITED PRICE</span>` : ''}
+        ${isQtyEdited ? `<br><span style="font-size:8px;color:#d97706;font-weight:bold;background-color:#fef3c7;border:1px solid #fde68a;padding:1px 3px;border-radius:3px;display:inline-block;margin-top:2px;letter-spacing:0.5px;">EDITED QUANTITY</span>` : ''}
+    </td>
     <td style="${LR}text-align:center;font-weight:bold;">${it.quantity} ${u === 'CAN' ? 'CANS' : u}${it.weight ? `<br><span style="font-size:9px;font-style:italic;font-weight:normal;">(${it.weight})</span>` : ''}</td>
     <td style="${LR}text-align:right;">${it.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
     <td style="${LR}text-align:center;">${u}</td>
@@ -172,6 +239,9 @@ export const generateInvoiceHTML = (data: InvoiceData, vehicleNo: string = '') =
 
 <div style="position:relative;text-align:center;margin-bottom:4px;">
     <b style="font-size:14px;text-decoration:underline;">QUOTATION</b>
+    ${hasAnyEdited ? `<span style="font-size:9px;color:#dc2626;background-color:#fee2e2;border:1px solid #fecaca;padding:2px 6px;border-radius:4px;font-weight:bold;margin-left:8px;vertical-align:middle;letter-spacing:0.5px;">EDITED PRICE</span>` : ''}
+    ${hasAnyQtyEdited ? `<span style="font-size:9px;color:#d97706;background-color:#fef3c7;border:1px solid #fde68a;padding:2px 6px;border-radius:4px;font-weight:bold;margin-left:8px;vertical-align:middle;letter-spacing:0.5px;">EDITED QUANTITY</span>` : ''}
+    ${isDateEdited ? `<span style="font-size:9px;color:#2563eb;background-color:#dbeafe;border:1px solid #bfdbfe;padding:2px 6px;border-radius:4px;font-weight:bold;margin-left:8px;vertical-align:middle;letter-spacing:0.5px;">EDITED DATE</span>` : ''}
     <span style="position:absolute;right:0;top:0;font-size:10px;font-style:italic;font-weight:normal;">(${label})</span>
 </div>
 
