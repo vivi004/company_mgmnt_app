@@ -408,6 +408,7 @@ export default function OrderingScreen() {
               params: {
                 cart: JSON.stringify(cart),
                 customPrices: JSON.stringify(customPrices),
+                initialCustomPrices,
                 shopId,
                 shopName,
                 orderLineId,

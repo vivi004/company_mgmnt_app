@@ -147,6 +147,7 @@ export default function ReviewOrder() {
     specificArea?: string;
     editBillId?: string;
     customPrices?: string;
+    initialCustomPrices?: string;
     phone?: string;
     phone2?: string;
     invoiceNo?: string;
@@ -316,7 +317,25 @@ export default function ReviewOrder() {
         }
       }
 
-      const isEditedPriceFinal = hasEditedPrice || params.initialIsEditedPrice === 'true';
+      let ratesChanged = false;
+      if (params.editBillId && params.initialCustomPrices) {
+        try {
+          const initCustomRates = JSON.parse(params.initialCustomPrices);
+          const allRateKeys = new Set([...Object.keys(initCustomRates), ...Object.keys(finalCustomRates)]);
+          for (const key of allRateKeys) {
+            if ((initCustomRates[key] ?? undefined) !== (finalCustomRates[key] ?? undefined)) {
+              ratesChanged = true;
+              break;
+            }
+          }
+        } catch (e) {
+          console.error("Error parsing initialCustomPrices:", e);
+        }
+      } else {
+        ratesChanged = hasEditedPrice;
+      }
+
+      const isEditedPriceFinal = ratesChanged || params.initialIsEditedPrice === 'true';
       const isEditedQtyFinal = hasEditedQty || params.initialIsEditedQty === 'true';
       const isEditedDateFinal = hasEditedDate || params.initialIsEditedDate === 'true';
 
