@@ -322,8 +322,13 @@ export default function ReviewOrder() {
         try {
           const initCustomRates = JSON.parse(params.initialCustomPrices);
           const allRateKeys = new Set([...Object.keys(initCustomRates), ...Object.keys(finalCustomRates)]);
+          const allProds = getAllProducts();
           for (const key of allRateKeys) {
-            if ((initCustomRates[key] ?? undefined) !== (finalCustomRates[key] ?? undefined)) {
+            const product = allProds.find(p => p.id === key);
+            const defaultPrice = product ? product.price : 0;
+            const originalVal = initCustomRates[key] ?? defaultPrice;
+            const finalVal = finalCustomRates[key] ?? defaultPrice;
+            if (originalVal !== finalVal) {
               ratesChanged = true;
               break;
             }
