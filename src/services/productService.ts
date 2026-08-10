@@ -94,7 +94,7 @@ export const DEFAULT_MIXED_OIL_PRODUCTS: Product[] = [
 
 export const DEFAULT_PALM_OIL_PRODUCTS: Product[] = [
     { id: 'po-r-850g', name: 'Palm Oil', brand: 'ROSI GOLD', size: '850 GM', price: 1320, unit: 'BOX', icon: '🌴' },
-    { id: 'po-r-820g', name: 'Palm Oil', brand: 'ROSI GOLD', size: '820 GM', price: 1280, unit: 'BOX', icon: '🌴' },
+    { id: 'po-r-1ltr', name: 'Palm Oil', brand: 'ROSI GOLD', size: '1LTR', price: 1280, unit: 'BOX', icon: '🌴' },
     { id: 'po-r-15l', name: 'Palm Oil', brand: 'ROSI GOLD', size: '15 LTR', price: 2180, unit: 'Litre', icon: '🌴' },
     { id: 'po-r-15kg', name: 'Palm Oil', brand: 'ROSI GOLD', size: '15 KG', price: 2400, unit: 'KG', icon: '🌴' },
 ];
