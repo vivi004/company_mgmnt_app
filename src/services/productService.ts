@@ -90,15 +90,11 @@ export const DEFAULT_MIXED_OIL_PRODUCTS: Product[] = [
     { id: 'mo-v-5lcan-ny', name: 'Varshini Gold (Nisha Yellow)', brand: 'VARSHINI', size: '5 Ltr Can', price: 820, unit: 'CAN', icon: '🛢️' },
     { id: 'mo-v-15l', name: 'Varshini Gold', brand: 'VARSHINI', size: '15 LTR', price: 2230, unit: 'Litre', icon: '🛢️' },
     { id: 'mo-v-15kg', name: 'Varshini Gold', brand: 'VARSHINI', size: '15 KG', price: 2440, unit: 'KG', icon: '🛢️' },
-    { id: 'mo-r-0.5lpo', name: 'ROSHINI', brand: 'ROSHINI', size: '1/2 Ltr ', price: 1380, unit: 'BOX', icon: '🛢️' },
-    { id: 'mo-r-1lpo', name: 'ROSHINI', brand: 'ROSHINI', size: '1 Ltr ', price: 1380, unit: 'BOX', icon: '🛢️' },
 ];
 
 export const DEFAULT_PALM_OIL_PRODUCTS: Product[] = [
     { id: 'po-r-850g', name: 'Palm Oil', brand: 'ROSI GOLD', size: '850 GM', price: 1320, unit: 'BOX', icon: '🌴' },
     { id: 'po-r-820g', name: 'Palm Oil', brand: 'ROSI GOLD', size: '820 GM', price: 1280, unit: 'BOX', icon: '🌴' },
-    { id: 'po-r-800g', name: 'Palm Oil', brand: 'ROSI GOLD', size: '800 GM', price: 1250, unit: 'BOX', icon: '🌴' },
-    { id: 'po-r-750g', name: 'Palm Oil', brand: 'ROSI GOLD', size: '750 GM', price: 1185, unit: 'BOX', icon: '🌴' },
     { id: 'po-r-15l', name: 'Palm Oil', brand: 'ROSI GOLD', size: '15 LTR', price: 2180, unit: 'Litre', icon: '🌴' },
     { id: 'po-r-15kg', name: 'Palm Oil', brand: 'ROSI GOLD', size: '15 KG', price: 2400, unit: 'KG', icon: '🌴' },
 ];
