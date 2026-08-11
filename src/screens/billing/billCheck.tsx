@@ -410,7 +410,7 @@ export default function BillCheckScreen() {
                       size={18} 
                       color="#2563EB" 
                     />
-                    <Text className="text-xs font-black text-blue-600 uppercase tracking-widest">{staffName}'s Bills</Text>
+                    <Text className="text-xs font-black text-blue-600 uppercase tracking-widest">{staffName}&apos;s Bills</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => {
